@@ -1,9 +1,10 @@
 .DS_Store
 .venv
+venv/
 __pycache__/
 .vscode/
 .idea/
-.streamlit/
+secrets.toml
 .env
 node_modules/
 cache/
