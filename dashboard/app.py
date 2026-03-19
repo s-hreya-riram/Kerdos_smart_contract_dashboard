@@ -1,5 +1,6 @@
 import json
 import streamlit as st
+import os
 import pandas as pd
 import plotly.express as px
 from web3 import Web3
@@ -195,7 +196,9 @@ if not check_password():
 # ─────────────────────────────────────────────
 #  WEB3 CONNECTION
 # ─────────────────────────────────────────────
-with open("abi.json") as f:
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+with open(os.path.join(BASE_DIR, "abi.json")) as f:
     ABI = json.load(f)
 
 w3 = Web3(Web3.HTTPProvider(st.secrets["contract"]["rpc_url"]))
