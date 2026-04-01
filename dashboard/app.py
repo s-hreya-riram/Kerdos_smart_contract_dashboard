@@ -244,33 +244,6 @@ def send_tx(fn):
 # ─────────────────────────────────────────────
 #  FETCH STATE
 # ─────────────────────────────────────────────
-@st.cache_data(ttl=15)
-def fetch_state():
-    total_supply = to_human(contract.functions.totalSupply().call())
-    token_name   = contract.functions.name().call()
-    token_symbol = contract.functions.symbol().call()
-
-    events = contract.events.Transfer.get_logs(from_block=0)
-    wallets = set()
-    for e in events:
-        if e["args"]["from"] != "0x0000000000000000000000000000000000000000":
-            wallets.add(e["args"]["from"])
-        if e["args"]["to"] != "0x0000000000000000000000000000000000000000":
-            wallets.add(e["args"]["to"])
-    wallets.add(OWNER)
-
-    balances    = {addr: to_human(contract.functions.balanceOf(addr).call()) for addr in wallets}
-    whitelisted = [addr for addr in wallets if contract.functions.whitelist(addr).call()]
-
-    return {
-        "total_supply": total_supply,
-        "token_name":   token_name,
-        "token_symbol": token_symbol,
-        "balances":     balances,
-        "whitelisted":  whitelisted,
-        "wallets":      list(wallets),
-    }
-
 @st.cache_data(ttl=300)
 def fetch_state():
     total_supply = to_human(contract.functions.totalSupply().call())
@@ -299,6 +272,22 @@ def fetch_state():
         "whitelisted":  whitelisted,
         "wallets":      list(wallets),
     }
+
+@st.cache_data(ttl=30)
+def fetch_transfers():
+    events = contract.events.Transfer.get_logs(from_block=0)
+    rows = []
+    for e in events:
+        rows.append({
+            "block":  e["blockNumber"],
+            "from":   e["args"]["from"],
+            "to":     e["args"]["to"],
+            "amount": to_human(e["args"]["value"]),
+            "type":   "Mint"      if e["args"]["from"] == "0x0000000000000000000000000000000000000000"
+                      else "Burn" if e["args"]["to"]   == "0x0000000000000000000000000000000000000000"
+                      else "Transfer",
+        })
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["block","from","to","amount","type"])
 
 @st.cache_data(ttl=30)
 def fetch_blocked():
