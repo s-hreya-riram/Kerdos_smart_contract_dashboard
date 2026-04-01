@@ -6,8 +6,8 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract RWASecurityToken is ERC20, Ownable {
 
-    mapping(address => bool) public allowlist;
-    mapping(address => bool) public blockedlist;
+    mapping(address => bool) public whitelist;
+    mapping(address => bool) public blacklist;
 
     event Whitelisted(address indexed account);
     event RemovedFromWhitelist(address indexed account);
@@ -20,33 +20,33 @@ contract RWASecurityToken is ERC20, Ownable {
         string memory symbol_,
         uint256 initialSupply
     ) ERC20(name_, symbol_) Ownable(msg.sender) {
-        allowlist[msg.sender] = true;
+        whitelist[msg.sender] = true;
         _mint(msg.sender, initialSupply * (10 ** decimals()));
     }
 
-    function addToAllowlist(address account) external onlyOwner {
-        allowlist[account] = true;
+    function addToWhitelist(address account) external onlyOwner {
+        whitelist[account] = true;
         emit Whitelisted(account);
     }
 
-    function removeFromAllowlist(address account) external onlyOwner {
-        allowlist[account] = false;
+    function removeFromWhitelist(address account) external onlyOwner {
+        whitelist[account] = false;
         emit RemovedFromWhitelist(account);
     }
 
-    function addToBlockedlist(address account) external onlyOwner {
-        blockedlist[account] = true;
+    function addToBlacklist(address account) external onlyOwner {
+        blacklist[account] = true;
         emit Blacklisted(account);
     }
 
-    function removeFromBlockedlist(address account) external onlyOwner {
-        blockedlist[account] = false;
+    function removeFromBlacklist(address account) external onlyOwner {
+        blacklist[account] = false;
         emit RemovedFromBlacklist(account);
     }
 
     function mint(address to, uint256 amount) external onlyOwner {
-        require(allowlist[to], "Token: receiver not allowlisted");
-        require(!blockedlist[to], "Token: receiver is blocked");
+        require(whitelist[to], "Token: receiver not whitelisted");
+        require(!blacklist[to], "Token: receiver is blacklisted");
         _mint(to, amount * (10 ** decimals()));
     }
 
@@ -63,9 +63,9 @@ contract RWASecurityToken is ERC20, Ownable {
         bool isBurn = (to == address(0));
 
         if (!isMint && !isBurn) {
-            require(!blockedlist[from], "Token: sender is blocked");
-            require(!blockedlist[to], "Token: receiver is blocked");
-            require(allowlist[to], "Token: receiver not allowlisted");
+            require(!blacklist[from], "Token: sender is blacklisted");
+            require(!blacklist[to], "Token: receiver is blacklisted");
+            require(whitelist[to], "Token: receiver not whitelisted");
         }
 
         super._update(from, to, value);

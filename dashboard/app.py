@@ -260,14 +260,14 @@ def fetch_state():
     wallets.add(OWNER)
 
     balances    = {addr: to_human(contract.functions.balanceOf(addr).call()) for addr in wallets}
-    allowlisted = [addr for addr in wallets if contract.functions.allowlist(addr).call()]
+    whitelisted = [addr for addr in wallets if contract.functions.whitelist(addr).call()]
 
     return {
         "total_supply": total_supply,
         "token_name":   token_name,
         "token_symbol": token_symbol,
         "balances":     balances,
-        "allowlisted":  allowlisted,
+        "whitelisted":  whitelisted,
         "wallets":      list(wallets),
     }
 
@@ -311,7 +311,7 @@ with st.sidebar:
     st.markdown("<p style='color:#6b7280;font-size:11px;margin-top:-12px;margin-bottom:16px'>KRDS · Sepolia Testnet</p>", unsafe_allow_html=True)
     st.divider()
     st.metric("Total Supply", f"{state['total_supply']:,.0f} KRDS")
-    st.metric("Allowlisted Wallets", len(state["allowlisted"]))
+    st.metric("Whitelisted Wallets", len(state["whitelisted"]))
     st.divider()
     st.caption(f"Contract: {short_addr(st.secrets['contract']['contract_addr'])}")
     st.caption(f"Owner: {short_addr(OWNER)}")
@@ -323,7 +323,7 @@ with st.sidebar:
 #  TABS
 # ─────────────────────────────────────────────
 tab_overview, tab_txns, tab_blocked, tab_actions, tab_admin = st.tabs([
-    "📊 Overview", "📋 Transactions", "🚫 Blocked", "⚡ Actions", "⚙️ Admin"
+    "📊 Overview", "📋 Transactions", "🚫 Blacklisted", "⚡ Actions", "⚙️ Admin"
 ])
 
 # ── OVERVIEW ─────────────────────────────────
@@ -332,7 +332,7 @@ with tab_overview:
     c1, c2, c3 = st.columns(3)
     c1.metric("Total Supply", f"{state['total_supply']:,.0f}")
     c2.metric("Token", f"{state['token_name']} ({state['token_symbol']})")
-    c3.metric("Allowlisted Wallets", len(state["allowlisted"]))
+    c3.metric("Whitelisted Wallets", len(state["whitelisted"]))
 
     st.divider()
     balances = {k: v for k, v in state["balances"].items() if v > 0}
@@ -361,8 +361,8 @@ with tab_overview:
         df_full = pd.DataFrame([{
             "Address":     addr,
             "Balance (KRDS)": f"{state['balances'].get(addr, 0):,.0f}",
-            "Allowlisted": "✅" if contract.functions.allowlist(addr).call() else "❌",
-            "Blocked":     "🔴" if contract.functions.blockedlist(addr).call() else "—",
+            "Whitelisted": "✅" if contract.functions.whitelist(addr).call() else "❌",
+            "Blacklisted": "🔴" if contract.functions.blacklist(addr).call() else "—",
         } for addr in state["wallets"]])
         st.dataframe(df_full, use_container_width=True, hide_index=True)
     else:
@@ -387,7 +387,7 @@ with tab_txns:
 
 # ── BLOCKED ───────────────────────────────────
 with tab_blocked:
-    st.markdown("### Blocked Transactions")
+    st.markdown("### Blocked/Blacklisted Transactions")
     df_bl = fetch_blocked()
     if df_bl.empty:
         st.success("No blocked transactions recorded.")
@@ -401,11 +401,11 @@ with tab_blocked:
 # ── ACTIONS ───────────────────────────────────
 with tab_actions:
     st.markdown("### Token Actions")
-    allowlisted = state["allowlisted"]
+    whitelisted = state["whitelisted"]
 
     with st.expander("🟢 Mint Tokens", expanded=True):
-        mode     = st.radio("Recipient", ["Select from allowlist", "Enter manually"], key="mint_mode", horizontal=True)
-        mint_to  = st.selectbox("Wallet", allowlisted, key="mint_sel") if mode == "Select from allowlist" \
+        mode     = st.radio("Recipient", ["Select from whitelist", "Enter manually"], key="mint_mode", horizontal=True)
+        mint_to  = st.selectbox("Wallet", whitelisted, key="mint_sel") if mode == "Select from whitelist" \
                    else st.text_input("Address", placeholder="0x…", key="mint_manual")
         mint_amt = st.number_input("Amount (KRDS)", min_value=1, step=1, key="mint_amt")
         if st.button("Mint", type="primary", key="btn_mint"):
@@ -417,8 +417,8 @@ with tab_actions:
                     st.cache_data.clear()
 
     with st.expander("🔴 Burn Tokens"):
-        mode      = st.radio("From", ["Select from allowlist", "Enter manually"], key="burn_mode", horizontal=True)
-        burn_from = st.selectbox("Wallet", allowlisted, key="burn_sel") if mode == "Select from allowlist" \
+        mode      = st.radio("From", ["Select from whitelist", "Enter manually"], key="burn_mode", horizontal=True)
+        burn_from = st.selectbox("Wallet", whitelisted, key="burn_sel") if mode == "Select from whitelist" \
                     else st.text_input("Address", placeholder="0x…", key="burn_manual")
         burn_amt  = st.number_input("Amount (KRDS)", min_value=1, step=1, key="burn_amt")
         if st.button("Burn", type="primary", key="btn_burn"):
@@ -430,11 +430,11 @@ with tab_actions:
                     st.cache_data.clear()
 
     with st.expander("🔵 Transfer Tokens"):
-        mode   = st.radio("To", ["Select from allowlist", "Enter manually"], key="tf_mode", horizontal=True)
-        tf_to  = st.selectbox("Recipient", allowlisted, key="tf_sel") if mode == "Select from allowlist" \
+        mode   = st.radio("To", ["Select from whitelist", "Enter manually"], key="tf_mode", horizontal=True)
+        tf_to  = st.selectbox("Recipient", whitelisted, key="tf_sel") if mode == "Select from whitelist" \
                  else st.text_input("Address", placeholder="0x…", key="tf_manual")
         tf_amt = st.number_input("Amount (KRDS)", min_value=1, step=1, key="tf_amt")
-        st.caption("Transfers from the owner wallet. Receiver must be allowlisted.")
+        st.caption("Transfers from the owner wallet. Receiver must be whitelisted.")
         if st.button("Transfer", type="primary", key="btn_tf"):
             if tf_to:
                 with st.spinner("Broadcasting transaction…"):
@@ -450,41 +450,41 @@ with tab_admin:
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("#### ✅ Allowlist")
-        add_addr = st.text_input("Add to allowlist", placeholder="0x…", key="add_wl")
-        if st.button("Add to Allowlist", key="btn_add_wl", type="primary"):
+        st.markdown("#### ✅ Whitelist")
+        add_addr = st.text_input("Add to whitelist", placeholder="0x…", key="add_wl")
+        if st.button("Add to Whitelist", key="btn_add_wl", type="primary"):
             if add_addr:
                 with st.spinner("Sending…"):
-                    receipt = send_tx(contract.functions.addToAllowlist(Web3.to_checksum_address(add_addr)))
+                    receipt = send_tx(contract.functions.addToWhitelist(Web3.to_checksum_address(add_addr)))
                 if receipt and receipt.status == 1:
-                    st.success(f"✅ {short_addr(add_addr)} allowlisted.")
+                    st.success(f"✅ {short_addr(add_addr)} whitelisted.")
                     st.cache_data.clear()
         st.divider()
-        rm_addr = st.selectbox("Remove from allowlist", [""] + allowlisted, key="rm_wl")
-        if st.button("Remove from Allowlist", key="btn_rm_wl"):
+        rm_addr = st.selectbox("Remove from whitelist", [""] + whitelisted, key="rm_wl")
+        if st.button("Remove from Whitelist", key="btn_rm_wl"):
             if rm_addr:
                 with st.spinner("Sending…"):
-                    receipt = send_tx(contract.functions.removeFromAllowlist(Web3.to_checksum_address(rm_addr)))
+                    receipt = send_tx(contract.functions.removeFromWhitelist(Web3.to_checksum_address(rm_addr)))
                 if receipt and receipt.status == 1:
                     st.success(f"✅ {short_addr(rm_addr)} removed.")
                     st.cache_data.clear()
 
     with col2:
-        st.markdown("#### 🚫 Blockedlist")
-        add_bl = st.text_input("Add to blockedlist", placeholder="0x…", key="add_bl")
-        if st.button("Add to Blockedlist", key="btn_add_bl", type="primary"):
+        st.markdown("#### 🚫 Blacklist")
+        add_bl = st.text_input("Add to blacklist", placeholder="0x…", key="add_bl")
+        if st.button("Add to Blacklist", key="btn_add_bl", type="primary"):
             if add_bl:
                 with st.spinner("Sending…"):
-                    receipt = send_tx(contract.functions.addToBlockedlist(Web3.to_checksum_address(add_bl)))
+                    receipt = send_tx(contract.functions.addToBlacklist(Web3.to_checksum_address(add_bl)))
                 if receipt and receipt.status == 1:
-                    st.success(f"✅ {short_addr(add_bl)} blocked.")
+                    st.success(f"✅ {short_addr(add_bl)} blacklisted.")
                     st.cache_data.clear()
         st.divider()
-        rm_bl = st.text_input("Remove from blockedlist", placeholder="0x…", key="rm_bl")
-        if st.button("Remove from Blockedlist", key="btn_rm_bl"):
+        rm_bl = st.text_input("Remove from blacklist", placeholder="0x…", key="rm_bl")
+        if st.button("Remove from Blacklist", key="btn_rm_bl"):
             if rm_bl:
                 with st.spinner("Sending…"):
-                    receipt = send_tx(contract.functions.removeFromBlockedlist(Web3.to_checksum_address(rm_bl)))
+                    receipt = send_tx(contract.functions.removeFromBlacklist(Web3.to_checksum_address(rm_bl)))
                 if receipt and receipt.status == 1:
                     st.success(f"✅ {short_addr(rm_bl)} unblocked.")
                     st.cache_data.clear()
@@ -495,7 +495,7 @@ with tab_admin:
             try:
                 addr = Web3.to_checksum_address(check)
                 st.metric("Balance",     f"{to_human(contract.functions.balanceOf(addr).call()):,.0f} KRDS")
-                st.metric("Allowlisted", "✅ Yes" if contract.functions.allowlist(addr).call() else "❌ No")
-                st.metric("Blocked",     "🔴 Yes" if contract.functions.blockedlist(addr).call() else "— No")
+                st.metric("Whitelisted", "✅ Yes" if contract.functions.whitelist(addr).call() else "❌ No")
+                st.metric("Blacklisted",     "🔴 Yes" if contract.functions.blacklist(addr).call() else "— No")
             except Exception:
                 st.error("Invalid address.")

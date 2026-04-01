@@ -288,7 +288,7 @@
         "type": "address"
       }
     ],
-    "name": "addToAllowlist",
+    "name": "addToBlacklist",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -301,7 +301,7 @@
         "type": "address"
       }
     ],
-    "name": "addToBlockedlist",
+    "name": "addToWhitelist",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -325,25 +325,6 @@
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "allowlist",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
       }
     ],
     "stateMutability": "view",
@@ -400,7 +381,7 @@
         "type": "address"
       }
     ],
-    "name": "blockedlist",
+    "name": "blacklist",
     "outputs": [
       {
         "internalType": "bool",
@@ -494,7 +475,7 @@
         "type": "address"
       }
     ],
-    "name": "removeFromAllowlist",
+    "name": "removeFromBlacklist",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -507,7 +488,7 @@
         "type": "address"
       }
     ],
-    "name": "removeFromBlockedlist",
+    "name": "removeFromWhitelist",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -609,6 +590,25 @@
     "name": "transferOwnership",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "whitelist",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   }
 ]
