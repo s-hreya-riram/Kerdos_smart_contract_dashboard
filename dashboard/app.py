@@ -156,10 +156,10 @@ hr { border: none; border-top: 1px solid #e8eaf0; margin: 16px 0; }
     font-family: 'DM Sans', sans-serif;
 }
 
-h1, h2, h3 {
+h1, h2, h3, h4 {
     font-family: 'DM Sans', sans-serif;
     font-weight: 600;
-    color: #1a1f36;
+    color: #1a1f36 !important;
     letter-spacing: -0.02em;
 }
 h1 { font-size: 24px; }
@@ -167,6 +167,23 @@ h2 { font-size: 18px; }
 h3 { font-size: 15px; }
 
 .stCaption, small { font-size: 11px; color: #9ca3af; }
+
+/* Fix washed-out radio labels */
+[data-testid="stRadio"] label,
+[data-testid="stRadio"] p {
+    color: #1a1f36 !important;
+    font-size: 13px;
+}
+
+/* Fix general body text going invisible */
+p, span, div {
+    color: #1a1f36;
+}
+
+/* Fix label text above inputs/selects */
+[data-testid="stWidgetLabel"] p {
+    color: #1a1f36 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
