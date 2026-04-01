@@ -335,8 +335,8 @@ with st.sidebar:
 # ─────────────────────────────────────────────
 #  TABS
 # ─────────────────────────────────────────────
-tab_overview, tab_txns, tab_blocked, tab_actions, tab_admin = st.tabs([
-    "📊 Overview", "📋 Transactions", "🚫 Blacklisted", "⚡ Actions", "⚙️ Admin"
+tab_overview, tab_txns, tab_actions, tab_admin = st.tabs([
+    "📊 Overview", "📋 Transactions", "⚡ Actions", "⚙️ Admin"
 ])
 
 # ── OVERVIEW ─────────────────────────────────
@@ -397,19 +397,6 @@ with tab_txns:
         df_show["from"] = df_show["from"].apply(short_addr)
         df_show["to"]   = df_show["to"].apply(short_addr)
         st.dataframe(df_show.sort_values("block", ascending=False), use_container_width=True, hide_index=True)
-
-# ── BLOCKED ───────────────────────────────────
-with tab_blocked:
-    st.markdown("### Blocked/Blacklisted Transactions")
-    df_bl = fetch_blocked()
-    if df_bl.empty:
-        st.success("No blocked transactions recorded.")
-    else:
-        st.warning(f"⚠️ {len(df_bl)} blocked transaction(s) found")
-        df_show = df_bl.copy()
-        df_show["from"] = df_show["from"].apply(short_addr)
-        df_show["to"]   = df_show["to"].apply(short_addr)
-        st.dataframe(df_show, use_container_width=True, hide_index=True)
 
 # ── ACTIONS ───────────────────────────────────
 with tab_actions:
