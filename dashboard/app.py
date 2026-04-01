@@ -224,6 +224,17 @@ def to_human(raw):
 def short_addr(addr):
     return f"{addr[:6]}…{addr[-4:]}"
 
+def preflight_check(addr):
+    is_wl = contract.functions.whitelist(addr).call()
+    is_bl = contract.functions.blacklist(addr).call()
+    if is_bl:
+        st.error("🚫 Receiver is blacklisted.")
+        return False
+    if not is_wl:
+        st.error("🚫 Receiver is not whitelisted.")
+        return False
+    return True
+
 def send_tx(fn):
     """Returns (receipt, error_message). One of them will always be None."""
     try:
@@ -395,13 +406,14 @@ with tab_actions:
         mint_amt = st.number_input("Amount (KRDS)", min_value=1, step=1, key="mint_amt")
         if st.button("Mint", type="primary", key="btn_mint"):
             if mint_to:
-                with st.spinner("Broadcasting transaction…"):
-                    receipt, err = send_tx(contract.functions.mint(Web3.to_checksum_address(mint_to), mint_amt))
-                if receipt and receipt.status == 1:
-                    st.success(f"✅ Minted {mint_amt:,} KRDS to {short_addr(mint_to)}")
-                    st.cache_data.clear()
-                elif err:
-                    st.error(err)
+                if preflight_check(Web3.to_checksum_address(mint_to)):
+                    with st.spinner("Broadcasting transaction…"):
+                        receipt, err = send_tx(contract.functions.mint(Web3.to_checksum_address(mint_to), mint_amt))
+                    if receipt and receipt.status == 1:
+                        st.success(f"✅ Minted {mint_amt:,} KRDS to {short_addr(mint_to)}")
+                        st.cache_data.clear()
+                    elif err:
+                        st.error(err)
 
     with st.expander("🔴 Burn Tokens"):
         mode      = st.radio("From", ["Select from whitelist", "Enter manually"], key="burn_mode", horizontal=True)
@@ -426,14 +438,18 @@ with tab_actions:
         st.caption("Transfers from the owner wallet. Receiver must be whitelisted.")
         if st.button("Transfer", type="primary", key="btn_tf"):
             if tf_to:
-                with st.spinner("Broadcasting transaction…"):
-                    receipt, err = send_tx(contract.functions.transfer(
-                        Web3.to_checksum_address(tf_to), tf_amt * (10 ** DECIMALS)))
-                if receipt and receipt.status == 1:
-                    st.success(f"✅ Transferred {tf_amt:,} KRDS to {short_addr(tf_to)}")
-                    st.cache_data.clear()
-                elif err:
-                    st.error(err)
+                # adding the owner blacklist check to ensure we fail transactions initiated from a blacklisted owner
+                if contract.functions.blacklist(OWNER).call():
+                    st.error("🚫 Owner wallet is blacklisted — transfer will fail.")
+                elif preflight_check(Web3.to_checksum_address(tf_to)):
+                    with st.spinner("Broadcasting transaction…"):
+                        receipt, err = send_tx(contract.functions.transfer(
+                            Web3.to_checksum_address(tf_to), tf_amt * (10 ** DECIMALS)))
+                    if receipt and receipt.status == 1:
+                        st.success(f"✅ Transferred {tf_amt:,} KRDS to {short_addr(tf_to)}")
+                        st.cache_data.clear()
+                    elif err:
+                        st.error(err)
 
 # ── ADMIN ─────────────────────────────────────
 with tab_admin:
