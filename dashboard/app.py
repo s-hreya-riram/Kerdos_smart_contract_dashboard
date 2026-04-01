@@ -176,8 +176,24 @@ h3 { font-size: 15px; }
 }
 
 /* Fix general body text going invisible */
-p, span, div {
-    color: #1a1f36;
+/* Replace with scoped rules instead */
+.stMarkdown p,
+.stMarkdown span,
+[data-testid="stText"] {
+    color: #1a1f36 !important;
+}
+
+/* Explicitly fix dropdown option text to white since it sits on dark background */
+[data-baseweb="select"] [data-baseweb="option"],
+[data-baseweb="menu"] [role="option"],
+[data-baseweb="popover"] li {
+    color: #ffffff !important;
+}
+
+/* But the selected value shown in the closed dropdown box should be light too */
+[data-baseweb="select"] [data-baseweb="single-value"],
+[data-baseweb="select"] input {
+    color: #ffffff !important;
 }
 
 /* Fix label text above inputs/selects */
