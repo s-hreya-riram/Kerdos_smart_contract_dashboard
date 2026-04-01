@@ -238,7 +238,18 @@ def send_tx(fn):
         receipt  = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         return receipt
     except Exception as e:
-        st.error(f"Transaction failed: {e}")
+        err = str(e)
+        # parse known revert reasons from the contract
+        if "receiver is blacklisted" in err:
+            st.error("🚫 Transfer blocked: receiver is blacklisted.")
+        elif "sender is blacklisted" in err:
+            st.error("🚫 Transfer blocked: sender is blacklisted.")
+        elif "receiver not whitelisted" in err:
+            st.error("🚫 Transfer blocked: receiver is not whitelisted.")
+        elif "execution reverted" in err:
+            st.error("🚫 Transaction reverted by contract.")
+        else:
+            st.error(f"Transaction failed: {e}")
         return None
 
 # ─────────────────────────────────────────────
