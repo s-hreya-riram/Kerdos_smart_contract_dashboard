@@ -257,14 +257,26 @@ def to_human(raw):
 def short_addr(addr):
     return f"{addr[:6]}…{addr[-4:]}"
 
-def preflight_check(addr):
+def preflight_check(addr, action_from=None, amount=None):
     is_wl = contract.functions.whitelist(addr).call()
     is_bl = contract.functions.blacklist(addr).call()
     if is_bl:
         st.error("🚫 Receiver is blacklisted.")
+        st.session_state["blocked_txns"].append({
+            "from": short_addr(action_from) if action_from else "—",
+            "to":   short_addr(addr),
+            "amount": amount or "—",
+            "reason": "Receiver is blacklisted",
+        })
         return False
     if not is_wl:
         st.error("🚫 Receiver is not whitelisted.")
+        st.session_state["blocked_txns"].append({
+            "from": short_addr(action_from) if action_from else "—",
+            "to":   short_addr(addr),
+            "amount": amount or "—",
+            "reason": "Receiver not whitelisted",
+        })
         return False
     return True
 
@@ -294,6 +306,9 @@ def send_tx(fn):
             return None, "🚫 Transaction reverted by contract."
         else:
             return None, f"Transaction failed: {e}"
+
+if "blocked_txns" not in st.session_state:
+    st.session_state["blocked_txns"] = []
 
 # ─────────────────────────────────────────────
 #  FETCH STATE
@@ -365,7 +380,7 @@ with st.sidebar:
 #  TABS
 # ─────────────────────────────────────────────
 tab_overview, tab_txns, tab_actions, tab_admin = st.tabs([
-    "📊 Overview", "📋 Transactions", "⚡ Actions", "⚙️ Admin"
+    "Overview", "Transactions", "Actions", "⚙️ Admin"
 ])
 
 # ── OVERVIEW ─────────────────────────────────
@@ -427,6 +442,18 @@ with tab_txns:
         df_show["to"]   = df_show["to"].apply(short_addr)
         st.dataframe(df_show.sort_values("block", ascending=False), use_container_width=True, hide_index=True)
 
+    # Adding a section for blocked transactions under the successful transactions
+    st.divider()
+    st.markdown("### Blocked Transactions")
+    if st.session_state["blocked_txns"]:
+        st.dataframe(
+            pd.DataFrame(st.session_state["blocked_txns"]),
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("No blocked transactions this session.")
+
 # ── ACTIONS ───────────────────────────────────
 with tab_actions:
     st.markdown("### Token Actions")
@@ -439,7 +466,7 @@ with tab_actions:
         mint_amt = st.number_input("Amount (KRDS)", min_value=1, step=1, key="mint_amt")
         if st.button("Mint", type="primary", key="btn_mint"):
             if mint_to:
-                if preflight_check(Web3.to_checksum_address(mint_to)):
+                if preflight_check(Web3.to_checksum_address(mint_to), action_from=OWNER, amount=mint_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.mint(Web3.to_checksum_address(mint_to), mint_amt))
                     if receipt and receipt.status == 1:
@@ -474,7 +501,7 @@ with tab_actions:
                 # adding the owner blacklist check to ensure we fail transactions initiated from a blacklisted owner
                 if contract.functions.blacklist(OWNER).call():
                     st.error("🚫 Owner wallet is blacklisted — transfer will fail.")
-                elif preflight_check(Web3.to_checksum_address(tf_to)):
+                elif preflight_check(Web3.to_checksum_address(tf_to), action_from=OWNER, amount=tf_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.transfer(
                             Web3.to_checksum_address(tf_to), tf_amt * (10 ** DECIMALS)))
