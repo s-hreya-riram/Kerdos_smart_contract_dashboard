@@ -15,7 +15,6 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
 html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
-.stApp { background-color: #f7f8fc; }
 #MainMenu, footer, header { visibility: hidden; }
 
 [data-testid="stSidebar"] {
@@ -114,6 +113,10 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     background: #1d4ed8;
     color: #ffffff;
 }
+            
+[data-testid="stWidgetLabel"] p {
+    color: inherit !important;
+}
 
 .stTextInput > div > div > input,
 .stNumberInput > div > div > input {
@@ -121,7 +124,7 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     border-radius: 8px;
     border: 1px solid #e8eaf0;
     font-size: 13px;
-    color: #1a1f36;
+    color: inherit !important;
 }
 .stTextInput > div > div > input:focus {
     border-color: #2563eb;
@@ -145,7 +148,7 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
 [data-testid="stExpander"] summary {
     font-weight: 500;
     font-size: 14px;
-    color: #1a1f36;
+    color: inherit !important;
 }
 
 hr { border: none; border-top: 1px solid #e8eaf0; margin: 16px 0; }
@@ -159,7 +162,7 @@ hr { border: none; border-top: 1px solid #e8eaf0; margin: 16px 0; }
 h1, h2, h3, h4 {
     font-family: 'DM Sans', sans-serif;
     font-weight: 600;
-    color: #1a1f36 !important;
+    color: inherit !important;
     letter-spacing: -0.02em;
 }
 h1 { font-size: 24px; }
@@ -171,7 +174,7 @@ h3 { font-size: 15px; }
 /* Fix washed-out radio labels */
 [data-testid="stRadio"] label,
 [data-testid="stRadio"] p {
-    color: #1a1f36 !important;
+    color: inherit !important;
     font-size: 13px;
 }
 
@@ -180,24 +183,19 @@ h3 { font-size: 15px; }
 .stMarkdown p,
 .stMarkdown span,
 [data-testid="stText"] {
-    color: #1a1f36 !important;
-}
-
-[data-baseweb="select"] [data-baseweb="single-value"],
-[data-baseweb="select"] input {
-    color: #1a1f36 !important;
+    color: inherit !important;
 }
 
 /* Dropdown option text - dark since background is white on both desktop and mobile */
+[data-baseweb="select"] [data-baseweb="single-value"],
+[data-baseweb="select"] input {
+    color: inherit !important;
+}
+
 [data-baseweb="select"] [data-baseweb="option"],
 [data-baseweb="menu"] [role="option"],
 [data-baseweb="popover"] li {
-    color: #1a1f36 !important;
-}
-
-/* Fix label text above inputs/selects */
-[data-testid="stWidgetLabel"] p {
-    color: #1a1f36 !important;
+    color: inherit !important;
 }
 </style>
 """, unsafe_allow_html=True)
