@@ -9,3 +9,4 @@ secrets.toml
 node_modules/
 cache/
 artifacts/
+blocked_txns.json

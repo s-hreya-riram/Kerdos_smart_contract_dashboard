@@ -188,7 +188,7 @@ h3 { font-size: 15px; }
     color: #1a1f36 !important;
 }
 
-/* Keep the open dropdown menu options as white (they sit on dark background on both) */
+/* Dropdown option text - dark since background is white on both desktop and mobile */
 [data-baseweb="select"] [data-baseweb="option"],
 [data-baseweb="menu"] [role="option"],
 [data-baseweb="popover"] li {
@@ -256,26 +256,48 @@ def to_human(raw):
 def short_addr(addr):
     return f"{addr[:6]}…{addr[-4:]}"
 
+# writing the blocked transactions to a local json file to persist across sessions
+# In a production setting, we'd use a proper database but this suffices for this POC
+import json, os
+
+BLOCKED_LOG = os.path.join(BASE_DIR, "blocked_txns.json")
+
+def load_blocked_txns():
+    if os.path.exists(BLOCKED_LOG):
+        with open(BLOCKED_LOG) as f:
+            return json.load(f)
+    return []
+
+def save_blocked_txn(entry):
+    txns = load_blocked_txns()
+    txns.append(entry)
+    with open(BLOCKED_LOG, "w") as f:
+        json.dump(txns, f)
+
 def preflight_check(addr, action_from=None, amount=None):
     is_wl = contract.functions.whitelist(addr).call()
     is_bl = contract.functions.blacklist(addr).call()
     if is_bl:
         st.error("🚫 Receiver is blacklisted.")
-        st.session_state["blocked_txns"].append({
+        entry ={
             "from": short_addr(action_from) if action_from else "—",
             "to":   short_addr(addr),
             "amount": amount or "—",
             "reason": "Receiver is blacklisted",
-        })
+        }
+        st.session_state["blocked_txns"].append(entry)
+        save_blocked_txn(entry)
         return False
     if not is_wl:
         st.error("🚫 Receiver is not whitelisted.")
-        st.session_state["blocked_txns"].append({
+        entry ={
             "from": short_addr(action_from) if action_from else "—",
             "to":   short_addr(addr),
             "amount": amount or "—",
             "reason": "Receiver not whitelisted",
-        })
+        }
+        st.session_state["blocked_txns"].append(entry)
+        save_blocked_txn(entry)
         return False
     return True
 
@@ -307,7 +329,7 @@ def send_tx(fn):
             return None, f"Transaction failed: {e}"
 
 if "blocked_txns" not in st.session_state:
-    st.session_state["blocked_txns"] = []
+    st.session_state["blocked_txns"] = load_blocked_txns()
 
 # ─────────────────────────────────────────────
 #  FETCH STATE
@@ -509,12 +531,14 @@ with tab_actions:
                 # adding the owner blacklist check to ensure we fail transactions initiated from a blacklisted owner
                 if contract.functions.blacklist(OWNER).call():
                     st.error("🚫 Owner wallet is blacklisted — transfer will fail.")
-                    st.session_state["blocked_txns"].append({
+                    entry = {
                         "from":   short_addr(OWNER),
                         "to":     short_addr(tf_to),
                         "amount": tf_amt,
                         "reason": "Sender (owner) is blacklisted",
-                    })
+                    }
+                    st.session_state["blocked_txns"].append(entry)
+                    save_blocked_txn(entry)
                 elif preflight_check(Web3.to_checksum_address(tf_to), action_from=OWNER, amount=tf_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.transfer(
