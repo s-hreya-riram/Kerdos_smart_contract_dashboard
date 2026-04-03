@@ -183,17 +183,16 @@ h3 { font-size: 15px; }
     color: #1a1f36 !important;
 }
 
-/* Explicitly fix dropdown option text to white since it sits on dark background */
+[data-baseweb="select"] [data-baseweb="single-value"],
+[data-baseweb="select"] input {
+    color: #1a1f36 !important;
+}
+
+/* Keep the open dropdown menu options as white (they sit on dark background on both) */
 [data-baseweb="select"] [data-baseweb="option"],
 [data-baseweb="menu"] [role="option"],
 [data-baseweb="popover"] li {
-    color: #ffffff !important;
-}
-
-/* But the selected value shown in the closed dropdown box should be light too */
-[data-baseweb="select"] [data-baseweb="single-value"],
-[data-baseweb="select"] input {
-    color: #ffffff !important;
+    color: #1a1f36 !important;
 }
 
 /* Fix label text above inputs/selects */
@@ -400,18 +399,27 @@ with tab_overview:
             st.markdown("#### Distribution")
             fig = px.pie(df, values="Balance", names="Wallet", hole=0.5,
                          color_discrete_sequence=["#2563eb","#3b82f6","#60a5fa","#93c5fd","#bfdbfe"])
-            fig.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                              font_family="DM Sans", margin=dict(t=20,b=20,l=20,r=20),
-                              legend=dict(font=dict(size=11)))
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="DM Sans", color="#1a1f36"),  # ← add this
+                margin=dict(t=20, b=20, l=20, r=20),
+                legend=dict(font=dict(size=11, color="#1a1f36"))  # ← add color here too
+            )
             fig.update_traces(textfont_size=11)
             st.plotly_chart(fig, use_container_width=True)
         with col2:
             st.markdown("#### Balances")
             fig2 = px.bar(df, x="Wallet", y="Balance",
                           color_discrete_sequence=["#2563eb"])
-            fig2.update_layout(paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                               font_family="DM Sans", margin=dict(t=20,b=20,l=20,r=20),
-                               xaxis=dict(showgrid=False), yaxis=dict(showgrid=True, gridcolor="#f0f0f0"))
+            fig2.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="DM Sans", color="#1a1f36"),  # ← add this
+                margin=dict(t=20, b=20, l=20, r=20),
+                xaxis=dict(showgrid=False, tickfont=dict(color="#1a1f36")),  # ← add tickfont
+                yaxis=dict(showgrid=True, gridcolor="#e8eaf0", tickfont=dict(color="#1a1f36"))  # ← add tickfont
+            )
             st.plotly_chart(fig2, use_container_width=True)
 
         st.markdown("#### All Wallets")
