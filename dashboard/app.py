@@ -501,6 +501,12 @@ with tab_actions:
                 # adding the owner blacklist check to ensure we fail transactions initiated from a blacklisted owner
                 if contract.functions.blacklist(OWNER).call():
                     st.error("🚫 Owner wallet is blacklisted — transfer will fail.")
+                    st.session_state["blocked_txns"].append({
+                        "from":   short_addr(OWNER),
+                        "to":     short_addr(tf_to),
+                        "amount": tf_amt,
+                        "reason": "Sender (owner) is blacklisted",
+                    })
                 elif preflight_check(Web3.to_checksum_address(tf_to), action_from=OWNER, amount=tf_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.transfer(
