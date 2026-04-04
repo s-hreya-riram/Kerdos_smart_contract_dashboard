@@ -4,6 +4,7 @@ import os
 import pandas as pd
 import plotly.express as px
 from web3 import Web3
+from decimal import Decimal
 
 st.set_page_config(page_title="Kerdos Token Dashboard", page_icon="🏦", layout="wide")
 
@@ -248,6 +249,9 @@ DECIMALS = contract.functions.decimals().call()
 # ─────────────────────────────────────────────
 #  HELPERS
 # ─────────────────────────────────────────────
+def to_raw(amount, decimals):
+    return int(Decimal(str(amount)) * Decimal(10 ** decimals))
+
 def to_human(raw):
     return raw / (10 ** DECIMALS)
 
@@ -274,7 +278,8 @@ def save_blocked_txn(entry):
 
 def check_balance(addr, amount):
     balance = to_human(contract.functions.balanceOf(addr).call())
-    if amount > balance:
+    raw_amt = to_raw(amount, DECIMALS)
+    if raw_amt > balance:
         st.error(f"🚫 Insufficient balance. Available: {balance:,.0f} KRDS")
         return False
     return True
@@ -505,7 +510,7 @@ with tab_actions:
         mint_amt = st.number_input("Amount (KRDS)", min_value=0.000001, step=1.0, value=1.0, key="mint_amt", format="%.6f")
         if st.button("Mint", type="primary", key="btn_mint"):
             if mint_to:
-                raw_amt = int(mint_amt * (10 ** DECIMALS))
+                raw_amt = to_raw(mint_amt, DECIMALS)
                 if preflight_check(Web3.to_checksum_address(mint_to), action_from=OWNER, amount=mint_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.mint(Web3.to_checksum_address(mint_to), raw_amt))
@@ -522,7 +527,7 @@ with tab_actions:
         burn_amt  = st.number_input("Amount (KRDS)", min_value=0.000001, step=1.0, key="burn_amt", format="%.6f")
         if st.button("Burn", type="primary", key="btn_burn"):
             if burn_from:
-                raw_amt = int(burn_amt * (10 ** DECIMALS))
+                raw_amt = to_raw(burn_amt, DECIMALS)
                 if check_balance(Web3.to_checksum_address(burn_from), burn_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.burn(Web3.to_checksum_address(burn_from), raw_amt))
@@ -540,7 +545,7 @@ with tab_actions:
         st.caption("Transfers from the owner wallet. Receiver must be whitelisted.")
         if st.button("Transfer", type="primary", key="btn_tf"):
             if tf_to:
-                raw_amt = int(tf_amt * (10 ** DECIMALS))
+                raw_amt = to_raw(tf_amt, DECIMALS)
                 # adding the owner blacklist check to ensure we fail transactions initiated from a blacklisted owner
                 if contract.functions.blacklist(OWNER).call():
                     st.error("🚫 Owner wallet is blacklisted — transfer will fail.")
