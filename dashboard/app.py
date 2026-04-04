@@ -250,7 +250,7 @@ DECIMALS = contract.functions.decimals().call()
 #  HELPERS
 # ─────────────────────────────────────────────
 def to_raw(amount, decimals):
-    return int(Decimal(str(amount)) * Decimal(10 ** decimals))
+    return int(Decimal(str(amount)) * Decimal(10) ** decimals)
 
 def to_human(raw):
     return raw / (10 ** DECIMALS)
@@ -557,6 +557,8 @@ with tab_actions:
                     }
                     st.session_state["blocked_txns"].append(entry)
                     save_blocked_txn(entry)
+                elif not check_balance(OWNER, tf_amt):
+                    pass
                 elif preflight_check(Web3.to_checksum_address(tf_to), action_from=OWNER, amount=tf_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.transfer(
