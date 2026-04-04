@@ -528,9 +528,16 @@ with tab_actions:
         if st.button("Burn", type="primary", key="btn_burn"):
             if burn_from:
                 raw_amt = to_raw(burn_amt, DECIMALS)
-                if check_balance(Web3.to_checksum_address(burn_from), burn_amt):
+                burn_addr = Web3.to_checksum_address(burn_from)
+                is_wl = contract.functions.whitelist(burn_addr).call()
+                is_bl = contract.functions.blacklist(burn_addr).call()
+                if is_bl:
+                    st.error("🚫 Burn blocked: sender is blacklisted.")
+                elif not is_wl:
+                    st.error("🚫 Burn blocked: sender is not whitelisted.")
+                elif check_balance(burn_addr, burn_amt):
                     with st.spinner("Broadcasting transaction…"):
-                        receipt, err = send_tx(contract.functions.burn(Web3.to_checksum_address(burn_from), raw_amt))
+                        receipt, err = send_tx(contract.functions.burn(burn_addr, raw_amt))
                     if receipt and receipt.status == 1:
                         st.success(f"✅ Burned {burn_amt:,} KRDS from {short_addr(burn_from)}")
                         st.cache_data.clear()
