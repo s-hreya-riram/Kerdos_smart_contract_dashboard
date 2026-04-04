@@ -533,8 +533,24 @@ with tab_actions:
                 is_bl = contract.functions.blacklist(burn_addr).call()
                 if is_bl:
                     st.error("🚫 Burn blocked: sender is blacklisted.")
+                    entry = {
+                        "from":   short_addr(burn_from),
+                        "to":     "-",
+                        "amount": burn_amt,
+                        "reason": "Sender is blacklisted",
+                    }
+                    st.session_state["blocked_txns"].append(entry)
+                    save_blocked_txn(entry)
                 elif not is_wl:
                     st.error("🚫 Burn blocked: sender is not whitelisted.")
+                    entry = {
+                        "from":   short_addr(burn_from),
+                        "to":     "—",
+                        "amount": burn_amt,
+                        "reason": "Sender is not whitelisted",
+                    }
+                    st.session_state["blocked_txns"].append(entry)
+                    save_blocked_txn(entry)
                 elif check_balance(burn_addr, burn_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.burn(burn_addr, raw_amt))
