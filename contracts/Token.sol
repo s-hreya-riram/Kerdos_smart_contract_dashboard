@@ -47,11 +47,13 @@ contract RWASecurityToken is ERC20, Ownable {
     function mint(address to, uint256 amount) external onlyOwner {
         require(whitelist[to], "Token: receiver not whitelisted");
         require(!blacklist[to], "Token: receiver is blacklisted");
-        _mint(to, amount * (10 ** decimals()));
+        _mint(to, amount);
     }
 
     function burn(address from, uint256 amount) external onlyOwner {
-        _burn(from, amount * (10 ** decimals()));
+        require(whitelist[from], "Token: sender not whitelisted");
+        require(!blacklist[from], "Token: sender is blacklisted");
+        _burn(from, amount);
     }
 
     function _update(

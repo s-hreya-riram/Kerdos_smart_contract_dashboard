@@ -272,6 +272,13 @@ def save_blocked_txn(entry):
     with open(BLOCKED_LOG, "w") as f:
         json.dump(txns, f)
 
+def check_balance(addr, amount):
+    balance = to_human(contract.functions.balanceOf(addr).call())
+    if amount > balance:
+        st.error(f"🚫 Insufficient balance. Available: {balance:,.0f} KRDS")
+        return False
+    return True
+
 def preflight_check(addr, action_from=None, amount=None):
     is_wl = contract.functions.whitelist(addr).call()
     is_bl = contract.functions.blacklist(addr).call()
@@ -316,13 +323,17 @@ def send_tx(fn):
     except Exception as e:
         err = str(e)
         if "receiver is blacklisted" in err:
-            return None, "🚫 Transfer blocked: receiver is blacklisted."
+            return None, "🚫 Receiver is blacklisted."
         elif "sender is blacklisted" in err:
-            return None, "🚫 Transfer blocked: sender is blacklisted."
+            return None, "🚫 Sender is blacklisted."
         elif "receiver not whitelisted" in err:
-            return None, "🚫 Transfer blocked: receiver is not whitelisted."
+            return None, "🚫 Receiver is not whitelisted."
         elif "execution reverted" in err:
             return None, "🚫 Transaction reverted by contract."
+        elif "sender not whitelisted" in err:
+            return None, "🚫 Sender is not whitelisted."
+        elif "insufficient balance" in err or "transfer amount exceeds balance" in err:
+            return None, "🚫 Insufficient balance."
         else:
             return None, f"Transaction failed: {e}"
 
@@ -491,12 +502,13 @@ with tab_actions:
         mode     = st.radio("Recipient", ["Select from whitelist", "Enter manually"], key="mint_mode", horizontal=True)
         mint_to  = st.selectbox("Wallet", whitelisted, key="mint_sel") if mode == "Select from whitelist" \
                    else st.text_input("Address", placeholder="0x…", key="mint_manual")
-        mint_amt = st.number_input("Amount (KRDS)", min_value=1, step=1, key="mint_amt")
+        mint_amt = st.number_input("Amount (KRDS)", min_value=0.000001, step=1.0, value=1.0, key="mint_amt", format="%.6f")
         if st.button("Mint", type="primary", key="btn_mint"):
             if mint_to:
+                raw_amt = int(mint_amt * (10 ** DECIMALS))
                 if preflight_check(Web3.to_checksum_address(mint_to), action_from=OWNER, amount=mint_amt):
                     with st.spinner("Broadcasting transaction…"):
-                        receipt, err = send_tx(contract.functions.mint(Web3.to_checksum_address(mint_to), mint_amt))
+                        receipt, err = send_tx(contract.functions.mint(Web3.to_checksum_address(mint_to), raw_amt))
                     if receipt and receipt.status == 1:
                         st.success(f"✅ Minted {mint_amt:,} KRDS to {short_addr(mint_to)}")
                         st.cache_data.clear()
@@ -507,25 +519,28 @@ with tab_actions:
         mode      = st.radio("From", ["Select from whitelist", "Enter manually"], key="burn_mode", horizontal=True)
         burn_from = st.selectbox("Wallet", whitelisted, key="burn_sel") if mode == "Select from whitelist" \
                     else st.text_input("Address", placeholder="0x…", key="burn_manual")
-        burn_amt  = st.number_input("Amount (KRDS)", min_value=1, step=1, key="burn_amt")
+        burn_amt  = st.number_input("Amount (KRDS)", min_value=0.000001, step=1.0, key="burn_amt", format="%.6f")
         if st.button("Burn", type="primary", key="btn_burn"):
             if burn_from:
-                with st.spinner("Broadcasting transaction…"):
-                    receipt, err = send_tx(contract.functions.burn(Web3.to_checksum_address(burn_from), burn_amt))
-                if receipt and receipt.status == 1:
-                    st.success(f"✅ Burned {burn_amt:,} KRDS from {short_addr(burn_from)}")
-                    st.cache_data.clear()
-                elif err:
-                    st.error(err)
+                raw_amt = int(burn_amt * (10 ** DECIMALS))
+                if check_balance(Web3.to_checksum_address(burn_from), burn_amt):
+                    with st.spinner("Broadcasting transaction…"):
+                        receipt, err = send_tx(contract.functions.burn(Web3.to_checksum_address(burn_from), raw_amt))
+                    if receipt and receipt.status == 1:
+                        st.success(f"✅ Burned {burn_amt:,} KRDS from {short_addr(burn_from)}")
+                        st.cache_data.clear()
+                    elif err:
+                        st.error(err)
 
     with st.expander("🔵 Transfer Tokens"):
         mode   = st.radio("To", ["Select from whitelist", "Enter manually"], key="tf_mode", horizontal=True)
         tf_to  = st.selectbox("Recipient", whitelisted, key="tf_sel") if mode == "Select from whitelist" \
                  else st.text_input("Address", placeholder="0x…", key="tf_manual")
-        tf_amt = st.number_input("Amount (KRDS)", min_value=1, step=1, key="tf_amt")
+        tf_amt = st.number_input("Amount (KRDS)", min_value=0.000001, step=1.0, key="tf_amt", format="%.6f")
         st.caption("Transfers from the owner wallet. Receiver must be whitelisted.")
         if st.button("Transfer", type="primary", key="btn_tf"):
             if tf_to:
+                raw_amt = int(tf_amt * (10 ** DECIMALS))
                 # adding the owner blacklist check to ensure we fail transactions initiated from a blacklisted owner
                 if contract.functions.blacklist(OWNER).call():
                     st.error("🚫 Owner wallet is blacklisted — transfer will fail.")
@@ -540,7 +555,7 @@ with tab_actions:
                 elif preflight_check(Web3.to_checksum_address(tf_to), action_from=OWNER, amount=tf_amt):
                     with st.spinner("Broadcasting transaction…"):
                         receipt, err = send_tx(contract.functions.transfer(
-                            Web3.to_checksum_address(tf_to), tf_amt * (10 ** DECIMALS)))
+                            Web3.to_checksum_address(tf_to), raw_amt))
                     if receipt and receipt.status == 1:
                         st.success(f"✅ Transferred {tf_amt:,} KRDS to {short_addr(tf_to)}")
                         st.cache_data.clear()
