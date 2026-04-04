@@ -277,10 +277,10 @@ def save_blocked_txn(entry):
         json.dump(txns, f)
 
 def check_balance(addr, amount):
-    balance = to_human(contract.functions.balanceOf(addr).call())
+    raw_balance = contract.functions.balanceOf(addr).call()
     raw_amt = to_raw(amount, DECIMALS)
-    if raw_amt > balance:
-        st.error(f"🚫 Insufficient balance. Available: {balance:,.0f} KRDS")
+    if raw_amt > raw_balance:
+        st.error(f"🚫 Insufficient balance. Available: {to_human(raw_balance):,.0f} KRDS")
         return False
     return True
 
