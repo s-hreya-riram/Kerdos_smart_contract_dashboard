@@ -114,7 +114,7 @@ html, body, [class*="css"] { font-family: 'DM Sans', sans-serif; }
     background: #1d4ed8;
     color: #ffffff;
 }
-            
+
 [data-testid="stWidgetLabel"] p {
     color: inherit !important;
 }
@@ -172,22 +172,18 @@ h3 { font-size: 15px; }
 
 .stCaption, small { font-size: 11px; color: #9ca3af; }
 
-/* Fix washed-out radio labels */
 [data-testid="stRadio"] label,
 [data-testid="stRadio"] p {
     color: inherit !important;
     font-size: 13px;
 }
 
-/* Fix general body text going invisible */
-/* Replace with scoped rules instead */
 .stMarkdown p,
 .stMarkdown span,
 [data-testid="stText"] {
     color: inherit !important;
 }
 
-/* Dropdown option text - dark since background is white on both desktop and mobile */
 [data-baseweb="select"] [data-baseweb="single-value"],
 [data-baseweb="select"] input {
     color: inherit !important;
@@ -246,6 +242,19 @@ OWNER    = Web3.to_checksum_address(st.secrets["contract"]["owner_address"])
 PRIV_KEY = st.secrets["contract"]["private_key"]
 DECIMALS = contract.functions.decimals().call()
 
+# Build signers map from secrets — owner is always present,
+# additional wallets can be added under [contract] as:
+#   extra_addresses = ["0x...", "0x..."]
+#   extra_private_keys = ["0x...", "0x..."]
+SIGNERS = {OWNER: PRIV_KEY}
+try:
+    extra_addresses = st.secrets["contract"].get("extra_addresses", [])
+    extra_keys      = st.secrets["contract"].get("extra_private_keys", [])
+    for addr, key in zip(extra_addresses, extra_keys):
+        SIGNERS[Web3.to_checksum_address(addr)] = key
+except Exception:
+    pass
+
 # ─────────────────────────────────────────────
 #  HELPERS
 # ─────────────────────────────────────────────
@@ -258,8 +267,6 @@ def to_human(raw):
 def short_addr(addr):
     return f"{addr[:6]}…{addr[-4:]}"
 
-# writing the blocked transactions to a local json file to persist across sessions
-# In a production setting, we'd use a proper database but this suffices for this POC
 import json, os
 
 BLOCKED_LOG = os.path.join(BASE_DIR, "blocked_txns.json")
@@ -278,20 +285,21 @@ def save_blocked_txn(entry):
 
 def check_balance(addr, amount):
     raw_balance = contract.functions.balanceOf(addr).call()
-    raw_amt = to_raw(amount, DECIMALS)
+    raw_amt     = to_raw(amount, DECIMALS)
     if raw_amt > raw_balance:
-        st.error(f"🚫 Insufficient balance. Available: {to_human(raw_balance):,.0f} KRDS")
+        st.error(f"🚫 Insufficient balance. Available: {to_human(raw_balance):,.4f} KRDS")
         return False
     return True
 
 def preflight_check(addr, action_from=None, amount=None):
+    """Validates recipient address for mint/transfer — checks whitelist and blacklist."""
     is_wl = contract.functions.whitelist(addr).call()
     is_bl = contract.functions.blacklist(addr).call()
     if is_bl:
         st.error("🚫 Receiver is blacklisted.")
-        entry ={
-            "from": short_addr(action_from) if action_from else "—",
-            "to":   short_addr(addr),
+        entry = {
+            "from":   short_addr(action_from) if action_from else "—",
+            "to":     short_addr(addr),
             "amount": amount or "—",
             "reason": "Receiver is blacklisted",
         }
@@ -300,9 +308,9 @@ def preflight_check(addr, action_from=None, amount=None):
         return False
     if not is_wl:
         st.error("🚫 Receiver is not whitelisted.")
-        entry ={
-            "from": short_addr(action_from) if action_from else "—",
-            "to":   short_addr(addr),
+        entry = {
+            "from":   short_addr(action_from) if action_from else "—",
+            "to":     short_addr(addr),
             "amount": amount or "—",
             "reason": "Receiver not whitelisted",
         }
@@ -311,17 +319,25 @@ def preflight_check(addr, action_from=None, amount=None):
         return False
     return True
 
-def send_tx(fn):
-    """Returns (receipt, error_message). One of them will always be None."""
+def send_tx(fn, sender=None):
+    """
+    Builds, signs, and broadcasts a transaction.
+    sender defaults to OWNER. Must be a key in SIGNERS.
+    Returns (receipt, error_message) — one will always be None.
+    """
+    sender   = sender or OWNER
+    priv_key = SIGNERS.get(sender)
+    if not priv_key:
+        return None, f"🚫 No signing key available for {short_addr(sender)}. Add it to secrets.toml."
     try:
-        nonce   = w3.eth.get_transaction_count(OWNER)
+        nonce   = w3.eth.get_transaction_count(sender)
         tx      = fn.build_transaction({
-            "from":     OWNER,
+            "from":     sender,
             "nonce":    nonce,
             "gasPrice": w3.eth.gas_price,
             "gas":      100_000,
         })
-        signed  = w3.eth.account.sign_transaction(tx, PRIV_KEY)
+        signed  = w3.eth.account.sign_transaction(tx, priv_key)
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         return receipt, None
@@ -331,14 +347,14 @@ def send_tx(fn):
             return None, "🚫 Receiver is blacklisted."
         elif "sender is blacklisted" in err:
             return None, "🚫 Sender is blacklisted."
-        elif "receiver not whitelisted" in err:
-            return None, "🚫 Receiver is not whitelisted."
-        elif "execution reverted" in err:
-            return None, "🚫 Transaction reverted by contract."
         elif "sender not whitelisted" in err:
             return None, "🚫 Sender is not whitelisted."
+        elif "receiver not whitelisted" in err:
+            return None, "🚫 Receiver is not whitelisted."
         elif "insufficient balance" in err or "transfer amount exceeds balance" in err:
             return None, "🚫 Insufficient balance."
+        elif "execution reverted" in err:
+            return None, "🚫 Transaction reverted by contract."
         else:
             return None, f"Transaction failed: {e}"
 
@@ -354,12 +370,10 @@ def fetch_state():
     token_name   = contract.functions.name().call()
     token_symbol = contract.functions.symbol().call()
 
-    # discover wallets from Whitelisted events (source of truth)
     whitelisted_events = contract.events.Whitelisted.get_logs(from_block=0)
     wallets = {e["args"]["account"] for e in whitelisted_events}
     wallets.add(OWNER)
 
-    # filter to only currently whitelisted (removes anyone who was later removed)
     wallets = {
         addr for addr in wallets
         if contract.functions.whitelist(addr).call()
@@ -391,7 +405,7 @@ def fetch_transfers():
                       else "Burn" if e["args"]["to"]   == "0x0000000000000000000000000000000000000000"
                       else "Transfer",
         })
-    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["block","from","to","amount","type"])
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["block", "from", "to", "amount", "type"])
 
 # ─────────────────────────────────────────────
 #  SIDEBAR
@@ -434,27 +448,24 @@ with tab_overview:
         with col1:
             st.markdown("#### Distribution")
             fig = px.pie(df, values="Balance", names="Wallet", hole=0.5,
-                         color_discrete_sequence=["#2563eb","#3b82f6","#60a5fa","#93c5fd","#bfdbfe"])
+                         color_discrete_sequence=["#2563eb", "#3b82f6", "#60a5fa", "#93c5fd", "#bfdbfe"])
             fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(family="DM Sans", color="#1a1f36"),  # ← add this
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="DM Sans", color="#1a1f36"),
                 margin=dict(t=20, b=20, l=20, r=20),
-                legend=dict(font=dict(size=11, color="#1a1f36"))  # ← add color here too
+                legend=dict(font=dict(size=11, color="#1a1f36"))
             )
             fig.update_traces(textfont_size=11)
             st.plotly_chart(fig, use_container_width=True)
         with col2:
             st.markdown("#### Balances")
-            fig2 = px.bar(df, x="Wallet", y="Balance",
-                          color_discrete_sequence=["#2563eb"])
+            fig2 = px.bar(df, x="Wallet", y="Balance", color_discrete_sequence=["#2563eb"])
             fig2.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="rgba(0,0,0,0)",
-                font=dict(family="DM Sans", color="#1a1f36"),  # ← add this
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font=dict(family="DM Sans", color="#1a1f36"),
                 margin=dict(t=20, b=20, l=20, r=20),
-                xaxis=dict(showgrid=False, tickfont=dict(color="#1a1f36")),  # ← add tickfont
-                yaxis=dict(showgrid=True, gridcolor="#e8eaf0", tickfont=dict(color="#1a1f36"))  # ← add tickfont
+                xaxis=dict(showgrid=False, tickfont=dict(color="#1a1f36")),
+                yaxis=dict(showgrid=True, gridcolor="#e8eaf0", tickfont=dict(color="#1a1f36"))
             )
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -486,7 +497,6 @@ with tab_txns:
         df_show["to"]   = df_show["to"].apply(short_addr)
         st.dataframe(df_show.sort_values("block", ascending=False), use_container_width=True, hide_index=True)
 
-    # Adding a section for blocked transactions under the successful transactions
     st.divider()
     st.markdown("### Blocked Transactions")
     if st.session_state["blocked_txns"]:
@@ -504,16 +514,19 @@ with tab_actions:
     whitelisted = state["whitelisted"]
 
     with st.expander("🟢 Mint Tokens", expanded=True):
-        mode     = st.radio("Recipient", ["Select from whitelist", "Enter manually"], key="mint_mode", horizontal=True)
-        mint_to  = st.selectbox("Wallet", whitelisted, key="mint_sel") if mode == "Select from whitelist" \
-                   else st.text_input("Address", placeholder="0x…", key="mint_manual")
+        mode    = st.radio("Recipient", ["Select from whitelist", "Enter manually"], key="mint_mode", horizontal=True)
+        mint_to = st.selectbox("Wallet", whitelisted, key="mint_sel") if mode == "Select from whitelist" \
+                  else st.text_input("Address", placeholder="0x…", key="mint_manual")
         mint_amt = st.number_input("Amount (KRDS)", min_value=0.000001, step=1.0, value=1.0, key="mint_amt", format="%.6f")
         if st.button("Mint", type="primary", key="btn_mint"):
             if mint_to:
                 raw_amt = to_raw(mint_amt, DECIMALS)
                 if preflight_check(Web3.to_checksum_address(mint_to), action_from=OWNER, amount=mint_amt):
                     with st.spinner("Broadcasting transaction…"):
-                        receipt, err = send_tx(contract.functions.mint(Web3.to_checksum_address(mint_to), raw_amt))
+                        receipt, err = send_tx(
+                            contract.functions.mint(Web3.to_checksum_address(mint_to), raw_amt),
+                            sender=OWNER
+                        )
                     if receipt and receipt.status == 1:
                         st.success(f"✅ Minted {mint_amt:,} KRDS to {short_addr(mint_to)}")
                         st.cache_data.clear()
@@ -527,7 +540,7 @@ with tab_actions:
         burn_amt  = st.number_input("Amount (KRDS)", min_value=0.000001, step=1.0, key="burn_amt", format="%.6f")
         if st.button("Burn", type="primary", key="btn_burn"):
             if burn_from:
-                raw_amt = to_raw(burn_amt, DECIMALS)
+                raw_amt   = to_raw(burn_amt, DECIMALS)
                 burn_addr = Web3.to_checksum_address(burn_from)
                 is_wl = contract.functions.whitelist(burn_addr).call()
                 is_bl = contract.functions.blacklist(burn_addr).call()
@@ -535,7 +548,7 @@ with tab_actions:
                     st.error("🚫 Burn blocked: sender is blacklisted.")
                     entry = {
                         "from":   short_addr(burn_from),
-                        "to":     "-",
+                        "to":     "—",
                         "amount": burn_amt,
                         "reason": "Sender is blacklisted",
                     }
@@ -553,7 +566,11 @@ with tab_actions:
                     save_blocked_txn(entry)
                 elif check_balance(burn_addr, burn_amt):
                     with st.spinner("Broadcasting transaction…"):
-                        receipt, err = send_tx(contract.functions.burn(burn_addr, raw_amt))
+                        # Burn is always executed by OWNER (onlyOwner on contract)
+                        receipt, err = send_tx(
+                            contract.functions.burn(burn_addr, raw_amt),
+                            sender=OWNER
+                        )
                     if receipt and receipt.status == 1:
                         st.success(f"✅ Burned {burn_amt:,} KRDS from {short_addr(burn_from)}")
                         st.cache_data.clear()
@@ -561,38 +578,49 @@ with tab_actions:
                         st.error(err)
 
     with st.expander("🔵 Transfer Tokens"):
-        mode   = st.radio("To", ["Select from whitelist", "Enter manually"], key="tf_mode", horizontal=True)
-        tf_to  = st.selectbox("Recipient", whitelisted, key="tf_sel") if mode == "Select from whitelist" \
-                 else st.text_input("Address", placeholder="0x…", key="tf_manual")
+        sender_mode = st.radio("From", ["Select from whitelist", "Enter manually"], key="tf_sender_mode", horizontal=True)
+        tf_from     = st.selectbox("Sender", whitelisted, key="tf_sender_sel") if sender_mode == "Select from whitelist" \
+                      else st.text_input("Sender address", placeholder="0x…", key="tf_sender_manual")
+        receiver_mode = st.radio("To", ["Select from whitelist", "Enter manually"], key="tf_receiver_mode", horizontal=True)
+        tf_to         = st.selectbox("Recipient", whitelisted, key="tf_sel") if receiver_mode == "Select from whitelist" \
+                        else st.text_input("Recipient address", placeholder="0x…", key="tf_manual")
         tf_amt = st.number_input("Amount (KRDS)", min_value=0.000001, step=1.0, key="tf_amt", format="%.6f")
-        st.caption("Transfers from the owner wallet. Receiver must be whitelisted.")
+        st.caption("Sender must have a signing key registered in secrets.toml. Receiver must be whitelisted.")
         if st.button("Transfer", type="primary", key="btn_tf"):
-            if tf_to:
-                raw_amt = to_raw(tf_amt, DECIMALS)
-                # adding the owner blacklist check to ensure we fail transactions initiated from a blacklisted owner
-                if contract.functions.blacklist(OWNER).call():
-                    st.error("🚫 Owner wallet is blacklisted — transfer will fail.")
+            if tf_from and tf_to:
+                raw_amt   = to_raw(tf_amt, DECIMALS)
+                sender_addr = Web3.to_checksum_address(tf_from)
+
+                # Check sender has a registered signing key
+                if sender_addr not in SIGNERS:
+                    st.error(f"🚫 No signing key for {short_addr(tf_from)}. Add it to secrets.toml.")
+                # Check sender is not blacklisted
+                elif contract.functions.blacklist(sender_addr).call():
+                    st.error("🚫 Sender is blacklisted — transfer will fail.")
                     entry = {
-                        "from":   short_addr(OWNER),
+                        "from":   short_addr(tf_from),
                         "to":     short_addr(tf_to),
                         "amount": tf_amt,
-                        "reason": "Sender (owner) is blacklisted",
+                        "reason": "Sender is blacklisted",
                     }
                     st.session_state["blocked_txns"].append(entry)
                     save_blocked_txn(entry)
-                elif not check_balance(OWNER, tf_amt):
+                # Check sender has sufficient balance
+                elif not check_balance(sender_addr, tf_amt):
                     pass
-                elif preflight_check(Web3.to_checksum_address(tf_to), action_from=OWNER, amount=tf_amt):
+                # Check recipient is valid
+                elif preflight_check(Web3.to_checksum_address(tf_to), action_from=sender_addr, amount=tf_amt):
                     with st.spinner("Broadcasting transaction…"):
-                        receipt, err = send_tx(contract.functions.transfer(
-                            Web3.to_checksum_address(tf_to), raw_amt))
+                        receipt, err = send_tx(
+                            contract.functions.transfer(Web3.to_checksum_address(tf_to), raw_amt),
+                            sender=sender_addr
+                        )
                     if receipt and receipt.status == 1:
-                        st.success(f"✅ Transferred {tf_amt:,} KRDS to {short_addr(tf_to)}")
+                        st.success(f"✅ Transferred {tf_amt:,} KRDS from {short_addr(tf_from)} to {short_addr(tf_to)}")
                         st.cache_data.clear()
                     elif err:
                         st.error(err)
 
-# ── ADMIN ─────────────────────────────────────
 with tab_admin:
     st.markdown("### Admin Controls")
     col1, col2 = st.columns(2)
@@ -603,7 +631,10 @@ with tab_admin:
         if st.button("Add to Whitelist", key="btn_add_wl", type="primary"):
             if add_addr:
                 with st.spinner("Sending…"):
-                    receipt, err = send_tx(contract.functions.addToWhitelist(Web3.to_checksum_address(add_addr)))
+                    receipt, err = send_tx(
+                        contract.functions.addToWhitelist(Web3.to_checksum_address(add_addr)),
+                        sender=OWNER
+                    )
                 if receipt and receipt.status == 1:
                     st.success(f"✅ {short_addr(add_addr)} whitelisted.")
                     st.cache_data.clear()
@@ -614,7 +645,10 @@ with tab_admin:
         if st.button("Remove from Whitelist", key="btn_rm_wl"):
             if rm_addr:
                 with st.spinner("Sending…"):
-                    receipt, err = send_tx(contract.functions.removeFromWhitelist(Web3.to_checksum_address(rm_addr)))
+                    receipt, err = send_tx(
+                        contract.functions.removeFromWhitelist(Web3.to_checksum_address(rm_addr)),
+                        sender=OWNER
+                    )
                 if receipt and receipt.status == 1:
                     st.success(f"✅ {short_addr(rm_addr)} removed.")
                     st.cache_data.clear()
@@ -627,7 +661,10 @@ with tab_admin:
         if st.button("Add to Blacklist", key="btn_add_bl", type="primary"):
             if add_bl:
                 with st.spinner("Sending…"):
-                    receipt, err = send_tx(contract.functions.addToBlacklist(Web3.to_checksum_address(add_bl)))
+                    receipt, err = send_tx(
+                        contract.functions.addToBlacklist(Web3.to_checksum_address(add_bl)),
+                        sender=OWNER
+                    )
                 if receipt and receipt.status == 1:
                     st.success(f"✅ {short_addr(add_bl)} blacklisted.")
                     st.cache_data.clear()
@@ -638,7 +675,10 @@ with tab_admin:
         if st.button("Remove from Blacklist", key="btn_rm_bl"):
             if rm_bl:
                 with st.spinner("Sending…"):
-                    receipt, err = send_tx(contract.functions.removeFromBlacklist(Web3.to_checksum_address(rm_bl)))
+                    receipt, err = send_tx(
+                        contract.functions.removeFromBlacklist(Web3.to_checksum_address(rm_bl)),
+                        sender=OWNER
+                    )
                 if receipt and receipt.status == 1:
                     st.success(f"✅ {short_addr(rm_bl)} unblocked.")
                     st.cache_data.clear()
@@ -650,7 +690,7 @@ with tab_admin:
         if check:
             try:
                 addr = Web3.to_checksum_address(check)
-                st.metric("Balance",     f"{to_human(contract.functions.balanceOf(addr).call()):,.0f} KRDS")
+                st.metric("Balance",     f"{to_human(contract.functions.balanceOf(addr).call()):,.4f} KRDS")
                 st.metric("Whitelisted", "✅ Yes" if contract.functions.whitelist(addr).call() else "❌ No")
                 st.metric("Blacklisted", "🔴 Yes" if contract.functions.blacklist(addr).call() else "— No")
             except Exception:
