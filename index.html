@@ -739,7 +739,10 @@ async function doTransfer() {
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer   = await provider.getSigner();
 
-    fetch('/static/abi.json').then(r => r.json())
+    const [abi, cfg] = await Promise.all([
+        apiFetch('/api/abi'),
+        apiFetch('/api/config'),
+    ]);
 
     const tokenContract = new ethers.Contract(cfg.contract_addr, abi, signer);
     const decimals = await tokenContract.decimals();

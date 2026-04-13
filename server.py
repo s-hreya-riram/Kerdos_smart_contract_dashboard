@@ -278,3 +278,7 @@ def get_blocked():
 def verify_password(req: PasswordOnlyRequest):
     check_admin_password(req.password)
     return {"ok": True}
+
+@app.get("/api/abi")
+def get_abi():
+    return JSONResponse(content=ABI)
