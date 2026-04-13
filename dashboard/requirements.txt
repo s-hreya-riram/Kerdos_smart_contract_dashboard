@@ -1,4 +1,0 @@
-streamlit
-web3
-pandas
-plotly

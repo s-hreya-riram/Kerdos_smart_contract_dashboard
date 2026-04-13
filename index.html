@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kerdos Token Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #f7f8fc;
+      --surface:  #ffffff;
+      --border:   #e8eaf0;
+      --primary:  #2563eb;
+      --primary-dark: #1d4ed8;
+      --text:     #1a1f36;
+      --muted:    #6b7280;
+      --accent:   #f0f4ff;
+      --error:    #ef4444;
+      --success:  #22c55e;
+      --warning:  #f59e0b;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── LAYOUT ── */
+    .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 2rem;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+    .logo span { color: var(--primary); }
+
+    .wallet-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .wallet-btn:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
+    .wallet-btn.connected { border-color: var(--success); color: var(--success); }
+    .wallet-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+    main { flex: 1; padding: 2rem; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+    /* ── TABS ── */
+    .tabs { display: flex; border-bottom: 2px solid var(--border); margin-bottom: 2rem; gap: 0; }
+    .tab {
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── CARDS & METRICS ── */
+    .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 2rem; }
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .metric-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .metric-value {
+      font-family: 'DM Mono', monospace;
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; }
+
+    /* ── TABLE ── */
+    .table-wrap { overflow-x: auto; border-radius: 12px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-family: 'DM Mono', monospace; font-size: 12px; }
+    th { background: var(--bg); padding: 10px 16px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 500; }
+    td { padding: 10px 16px; border-top: 1px solid var(--border); }
+    tr:hover td { background: var(--bg); }
+
+    /* ── FORMS ── */
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+    input[type="text"], input[type="number"], input[type="password"] {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      color: var(--text);
+      background: var(--surface);
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+
+    .btn {
+      padding: 9px 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn:hover { border-color: var(--primary); color: var(--primary); background: var(--accent); }
+    .btn-primary { background: var(--primary); color: #fff; border: none; }
+    .btn-primary:hover { background: var(--primary-dark); color: #fff; }
+    .btn-danger { background: var(--error); color: #fff; border: none; }
+    .btn-danger:hover { background: #dc2626; color: #fff; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── ALERTS ── */
+    .alert {
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .alert.show { display: block; }
+    .alert-error   { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    .alert-success { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+    .alert-info    { background: var(--accent); color: var(--primary); border: 1px solid #bfdbfe; }
+
+    /* ── GRID ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    /* ── ADMIN LOCK ── */
+    .admin-lock {
+      text-align: center;
+      padding: 40px;
+    }
+    .admin-lock h3 { margin-bottom: 8px; }
+    .admin-lock p { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    .admin-lock .form-group { max-width: 320px; margin: 0 auto 16px; text-align: left; }
+
+    /* ── SECTION TITLE ── */
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      margin-bottom: 20px;
+    }
+
+    /* ── DIVIDER ── */
+    hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+    /* ── SPINNER ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── TX HASH LINK ── */
+    .tx-link { color: var(--primary); text-decoration: none; font-size: 12px; }
+    .tx-link:hover { text-decoration: underline; }
+
+    /* ── BADGE ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .badge-mint     { background: #dcfce7; color: #166534; }
+    .badge-burn     { background: #fef2f2; color: #991b1b; }
+    .badge-transfer { background: var(--accent); color: var(--primary); }
+
+    /* ── METAMASK NOTICE ── */
+    .mm-notice {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 12px 16px;
+      font-size: 13px;
+      color: #92400e;
+      margin-bottom: 16px;
+    }
+
+    .refresh-btn {
+      float: right;
+      margin-top: -4px;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">🏦 Kerdos <span>Dashboard</span></div>
+    <button class="wallet-btn" id="walletBtn" onclick="connectWallet()">
+      <span class="wallet-dot"></span>
+      <span id="walletLabel">Connect Wallet</span>
+    </button>
+  </header>
+
+  <main>
+    <!-- TABS -->
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('overview')">📊 Overview</div>
+      <div class="tab" onclick="showTab('transactions')">📋 Transactions</div>
+      <div class="tab" onclick="showTab('transfer')">🔵 Transfer</div>
+      <div class="tab" onclick="showTab('admin')">⚙️ Admin</div>
+    </div>
+
+    <!-- OVERVIEW TAB -->
+    <div class="tab-content active" id="tab-overview">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div class="section-title" style="margin-bottom:0">Token Overview</div>
+        <button class="btn refresh-btn" onclick="loadState()">🔄 Refresh</button>
+      </div>
+
+      <div class="metrics" id="overview-metrics">
+        <div class="metric"><div class="metric-label">Total Supply</div><div class="metric-value" id="m-supply">—</div></div>
+        <div class="metric"><div class="metric-label">Token</div><div class="metric-value" id="m-token">—</div></div>
+        <div class="metric"><div class="metric-label">Whitelisted Wallets</div><div class="metric-value" id="m-wallets">—</div></div>
+        <div class="metric"><div class="metric-label">Your Balance</div><div class="metric-value" id="m-balance">—</div></div>
+      </div>
+
+      <div class="card">
+        <h3>All Wallets</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Address</th><th>Balance (KRDS)</th><th>Whitelisted</th><th>Blacklisted</th></tr></thead>
+            <tbody id="wallets-table"><tr><td colspan="4" style="color:var(--muted);text-align:center">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRANSACTIONS TAB -->
+    <div class="tab-content" id="tab-transactions">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+        <div class="section-title" style="margin-bottom:0">Transaction History</div>
+        <button class="btn" onclick="loadTransactions()">🔄 Refresh</button>
+      </div>
+
+      <div class="metrics">
+        <div class="metric"><div class="metric-label">Total Transactions</div><div class="metric-value" id="t-total">—</div></div>
+        <div class="metric"><div class="metric-label">Total Minted</div><div class="metric-value" id="t-minted">—</div></div>
+        <div class="metric"><div class="metric-label">Total Burned</div><div class="metric-value" id="t-burned">—</div></div>
+      </div>
+
+      <div class="card">
+        <h3>All Transactions</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Block</th><th>Type</th><th>From</th><th>To</th><th>Amount (KRDS)</th><th>Tx</th></tr></thead>
+            <tbody id="txns-table"><tr><td colspan="6" style="color:var(--muted);text-align:center">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Blocked Transactions <span style="font-size:12px;color:var(--muted);font-weight:400">(this session)</span></h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>From</th><th>To</th><th>Amount</th><th>Reason</th></tr></thead>
+            <tbody id="blocked-table"><tr><td colspan="4" style="color:var(--muted);text-align:center">No blocked transactions this session.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TRANSFER TAB -->
+    <div class="tab-content" id="tab-transfer">
+      <div class="section-title">Transfer Tokens</div>
+
+      <div id="no-wallet-notice" class="mm-notice">
+        ⚠️ Connect your MetaMask wallet to transfer tokens from your address.
+      </div>
+
+      <div class="card">
+        <h3>Transfer from Connected Wallet</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          Transfers are signed by your MetaMask wallet. Recipient must be whitelisted.
+        </p>
+
+        <div id="transfer-alert" class="alert"></div>
+
+        <div class="form-group">
+          <label>Recipient Address</label>
+          <input type="text" id="tf-to" placeholder="0x…" />
+        </div>
+        <div class="form-group">
+          <label>Amount (KRDS)</label>
+          <input type="number" id="tf-amt" placeholder="1.0" min="0.000001" step="1" />
+        </div>
+        <button class="btn btn-primary" onclick="doTransfer()" id="tf-btn">Transfer</button>
+      </div>
+    </div>
+
+    <!-- ADMIN TAB -->
+    <div class="tab-content" id="tab-admin">
+      <div class="section-title">Admin Controls</div>
+
+      <!-- Admin lock screen -->
+      <div id="admin-lock" class="card admin-lock">
+        <h3>🔒 Admin Access Required</h3>
+        <p>Enter the admin password to access owner functions (mint, burn, whitelist, blacklist).</p>
+        <div class="form-group">
+          <label>Admin Password</label>
+          <input type="password" id="admin-pwd-input" placeholder="Enter password" onkeydown="if(event.key==='Enter')unlockAdmin()" />
+        </div>
+        <div id="admin-lock-alert" class="alert"></div>
+        <button class="btn btn-primary" onclick="unlockAdmin()">Unlock</button>
+      </div>
+
+      <!-- Admin panel (hidden until unlocked) -->
+      <div id="admin-panel" style="display:none">
+
+        <div class="grid-2">
+          <!-- MINT -->
+          <div class="card">
+            <h3>🟢 Mint Tokens</h3>
+            <div id="mint-alert" class="alert"></div>
+            <div class="form-group">
+              <label>Recipient Address</label>
+              <input type="text" id="mint-to" placeholder="0x…" />
+            </div>
+            <div class="form-group">
+              <label>Amount (KRDS)</label>
+              <input type="number" id="mint-amt" placeholder="1.0" min="0.000001" step="1" />
+            </div>
+            <button class="btn btn-primary" onclick="doMint()">Mint</button>
+          </div>
+
+          <!-- BURN -->
+          <div class="card">
+            <h3>🔴 Burn Tokens</h3>
+            <div id="burn-alert" class="alert"></div>
+            <div class="form-group">
+              <label>From Address</label>
+              <input type="text" id="burn-from" placeholder="0x…" />
+            </div>
+            <div class="form-group">
+              <label>Amount (KRDS)</label>
+              <input type="number" id="burn-amt" placeholder="1.0" min="0.000001" step="1" />
+            </div>
+            <button class="btn btn-danger" onclick="doBurn()">Burn</button>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- WHITELIST -->
+          <div class="card">
+            <h3>✅ Whitelist</h3>
+            <div id="wl-alert" class="alert"></div>
+            <div class="form-group">
+              <label>Add to Whitelist</label>
+              <input type="text" id="wl-add" placeholder="0x…" />
+            </div>
+            <button class="btn btn-primary" onclick="doWhitelist('add')" style="margin-bottom:12px">Add to Whitelist</button>
+            <hr />
+            <div class="form-group" style="margin-top:12px">
+              <label>Remove from Whitelist</label>
+              <input type="text" id="wl-rm" placeholder="0x…" />
+            </div>
+            <button class="btn" onclick="doWhitelist('remove')">Remove from Whitelist</button>
+          </div>
+
+          <!-- BLACKLIST -->
+          <div class="card">
+            <h3>🚫 Blacklist</h3>
+            <div id="bl-alert" class="alert"></div>
+            <div class="form-group">
+              <label>Add to Blacklist</label>
+              <input type="text" id="bl-add" placeholder="0x…" />
+            </div>
+            <button class="btn btn-danger" onclick="doBlacklist('add')" style="margin-bottom:12px">Add to Blacklist</button>
+            <hr />
+            <div class="form-group" style="margin-top:12px">
+              <label>Remove from Blacklist</label>
+              <input type="text" id="bl-rm" placeholder="0x…" />
+            </div>
+            <button class="btn" onclick="doBlacklist('remove')">Remove from Blacklist</button>
+          </div>
+        </div>
+
+        <!-- CHECK ADDRESS -->
+        <div class="card">
+          <h3>🔍 Check Address</h3>
+          <div id="check-alert" class="alert"></div>
+          <div style="display:flex;gap:12px;align-items:flex-end">
+            <div class="form-group" style="flex:1;margin-bottom:0">
+              <label>Address to Inspect</label>
+              <input type="text" id="check-addr" placeholder="0x…" />
+            </div>
+            <button class="btn btn-primary" onclick="doCheck()" style="margin-bottom:1px">Check</button>
+          </div>
+          <div id="check-result" style="display:none;margin-top:16px">
+            <div class="metrics" style="margin-bottom:0">
+              <div class="metric"><div class="metric-label">Balance</div><div class="metric-value" id="cr-balance">—</div></div>
+              <div class="metric"><div class="metric-label">Whitelisted</div><div class="metric-value" id="cr-wl">—</div></div>
+              <div class="metric"><div class="metric-label">Blacklisted</div><div class="metric-value" id="cr-bl">—</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="text-align:right;margin-top:8px">
+          <button class="btn" onclick="lockAdmin()">🔒 Lock Admin</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  CONFIG — points to your FastAPI backend
+//  In production this is just window.location.origin
+//  since FastAPI serves both the HTML and API
+// ─────────────────────────────────────────────
+const API_BASE = window.location.origin;
+
+// ─────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────
+let walletAddress  = null;
+let adminPassword  = null;
+let blockedTxns    = [];
+
+// ─────────────────────────────────────────────
+//  TABS
+// ─────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const names = ['overview', 'transactions', 'transfer', 'admin'];
+    t.classList.toggle('active', names[i] === name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'overview')      loadState();
+  if (name === 'transactions')  loadTransactions();
+}
+
+// ─────────────────────────────────────────────
+//  METAMASK
+// ─────────────────────────────────────────────
+async function connectWallet() {
+  if (!window.ethereum) {
+    alert('MetaMask not detected. Please install MetaMask.');
+    return;
+  }
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    walletAddress = accounts[0];
+    updateWalletUI();
+    loadState();
+  } catch (e) {
+    console.error('Wallet connection failed', e);
+  }
+}
+
+function updateWalletUI() {
+  const btn   = document.getElementById('walletBtn');
+  const label = document.getElementById('walletLabel');
+  if (walletAddress) {
+    btn.classList.add('connected');
+    label.textContent = shortAddr(walletAddress);
+    document.getElementById('no-wallet-notice').style.display = 'none';
+  } else {
+    btn.classList.remove('connected');
+    label.textContent = 'Connect Wallet';
+    document.getElementById('no-wallet-notice').style.display = 'block';
+  }
+}
+
+if (window.ethereum) {
+  window.ethereum.on('accountsChanged', accounts => {
+    walletAddress = accounts[0] || null;
+    updateWalletUI();
+    loadState();
+  });
+}
+
+// ─────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────
+function shortAddr(addr) {
+  return addr ? addr.slice(0, 6) + '…' + addr.slice(-4) : '—';
+}
+
+function fmt(n) {
+  return Number(n).toLocaleString('en', { maximumFractionDigits: 4 });
+}
+
+function showAlert(id, msg, type = 'error') {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = `alert alert-${type} show`;
+  setTimeout(() => el.classList.remove('show'), 6000);
+}
+
+function setLoading(btnId, loading) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.disabled = loading;
+  btn.innerHTML = loading
+    ? `<span class="spinner"></span> Processing…`
+    : btn.dataset.label || btn.textContent;
+}
+
+async function apiFetch(path, options = {}) {
+  const res  = await fetch(API_BASE + path, options);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.detail || 'Request failed');
+  return data;
+}
+
+async function adminPost(path, extra = {}) {
+  return apiFetch(path, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ password: adminPassword, ...extra }),
+  });
+}
+
+function logBlocked(entry) {
+  blockedTxns.push(entry);
+  renderBlocked();
+}
+
+// ─────────────────────────────────────────────
+//  LOAD STATE
+// ─────────────────────────────────────────────
+async function loadState() {
+  try {
+    const state = await apiFetch('/api/state');
+    document.getElementById('m-supply').textContent  = fmt(state.total_supply) + ' KRDS';
+    document.getElementById('m-token').textContent   = `${state.token_name} (${state.token_symbol})`;
+    document.getElementById('m-wallets').textContent = state.wallets.length;
+
+    // Your balance
+    if (walletAddress) {
+      const mine = state.wallets.find(w => w.address.toLowerCase() === walletAddress.toLowerCase());
+      document.getElementById('m-balance').textContent = mine ? fmt(mine.balance) + ' KRDS' : '0 KRDS';
+    } else {
+      document.getElementById('m-balance').textContent = '—';
+    }
+
+    // Wallets table
+    const tbody = document.getElementById('wallets-table');
+    if (!state.wallets.length) {
+      tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center">No wallets yet.</td></tr>';
+    } else {
+      tbody.innerHTML = state.wallets.map(w => `
+        <tr>
+          <td title="${w.address}">${shortAddr(w.address)}</td>
+          <td>${fmt(w.balance)}</td>
+          <td>${w.whitelisted ? '✅' : '❌'}</td>
+          <td>${w.blacklisted ? '🔴' : '—'}</td>
+        </tr>
+      `).join('');
+    }
+  } catch (e) {
+    console.error('loadState failed', e);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  LOAD TRANSACTIONS
+// ─────────────────────────────────────────────
+async function loadTransactions() {
+  try {
+    const txns = await apiFetch('/api/transactions');
+    document.getElementById('t-total').textContent  = txns.length;
+    document.getElementById('t-minted').textContent = fmt(txns.filter(t => t.type === 'Mint').reduce((s, t) => s + t.amount, 0));
+    document.getElementById('t-burned').textContent = fmt(txns.filter(t => t.type === 'Burn').reduce((s, t) => s + t.amount, 0));
+
+    const tbody = document.getElementById('txns-table');
+    if (!txns.length) {
+      tbody.innerHTML = '<tr><td colspan="6" style="color:var(--muted);text-align:center">No transactions yet.</td></tr>';
+    } else {
+      tbody.innerHTML = txns.map(t => `
+        <tr>
+          <td>${t.block}</td>
+          <td><span class="badge badge-${t.type.toLowerCase()}">${t.type}</span></td>
+          <td title="${t.from}">${shortAddr(t.from)}</td>
+          <td title="${t.to}">${shortAddr(t.to)}</td>
+          <td>${fmt(t.amount)}</td>
+          <td>—</td>
+        </tr>
+      `).join('');
+    }
+  } catch (e) {
+    console.error('loadTransactions failed', e);
+  }
+}
+
+function renderBlocked() {
+  const tbody = document.getElementById('blocked-table');
+  if (!blockedTxns.length) {
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center">No blocked transactions this session.</td></tr>';
+  } else {
+    tbody.innerHTML = blockedTxns.map(t => `
+      <tr>
+        <td title="${t.from}">${shortAddr(t.from)}</td>
+        <td title="${t.to}">${shortAddr(t.to)}</td>
+        <td>${fmt(t.amount)}</td>
+        <td>${t.reason}</td>
+      </tr>
+    `).join('');
+  }
+}
+
+// ─────────────────────────────────────────────
+//  TRANSFER (MetaMask signs)
+// ─────────────────────────────────────────────
+async function doTransfer() {
+  if (!walletAddress) {
+    showAlert('transfer-alert', '⚠️ Please connect your MetaMask wallet first.', 'info');
+    return;
+  }
+
+  const toAddr = document.getElementById('tf-to').value.trim();
+  const amount = parseFloat(document.getElementById('tf-amt').value);
+
+  if (!toAddr || !amount) {
+    showAlert('transfer-alert', '🚫 Please fill in all fields.');
+    return;
+  }
+
+  // Pre-flight: check recipient via API
+  let recipientInfo;
+  try {
+    recipientInfo = await apiFetch(`/api/check/${toAddr}`);
+  } catch (e) {
+    showAlert('transfer-alert', '🚫 Invalid recipient address.');
+    logBlocked({ from: walletAddress, to: toAddr, amount, reason: 'Invalid address' });
+    return;
+  }
+
+  if (recipientInfo.blacklisted) {
+    showAlert('transfer-alert', '🚫 Receiver is blacklisted.');
+    logBlocked({ from: walletAddress, to: toAddr, amount, reason: 'Receiver is blacklisted' });
+    return;
+  }
+  if (!recipientInfo.whitelisted) {
+    showAlert('transfer-alert', '🚫 Receiver is not whitelisted.');
+    logBlocked({ from: walletAddress, to: toAddr, amount, reason: 'Receiver not whitelisted' });
+    return;
+  }
+
+  // Check sender balance
+  let senderInfo;
+  try {
+    senderInfo = await apiFetch(`/api/check/${walletAddress}`);
+  } catch (e) {
+    showAlert('transfer-alert', '🚫 Could not check sender balance.');
+    return;
+  }
+  if (amount > senderInfo.balance) {
+    showAlert('transfer-alert', `🚫 Insufficient balance. Available: ${fmt(senderInfo.balance)} KRDS`);
+    return;
+  }
+
+  // Check sender blacklisted
+  if (senderInfo.blacklisted) {
+    showAlert('transfer-alert', '🚫 Your wallet is blacklisted.');
+    logBlocked({ from: walletAddress, to: toAddr, amount, reason: 'Sender is blacklisted' });
+    return;
+  }
+
+  // Sign and send via MetaMask
+  try {
+    document.getElementById('tf-btn').disabled = true;
+    document.getElementById('tf-btn').innerHTML = '<span class="spinner"></span> Waiting for MetaMask…';
+
+    const provider = new ethers.BrowserProvider(window.ethereum);
+    const signer   = await provider.getSigner();
+
+    const [abi, cfg] = await Promise.all([
+      fetch('/abi.json').then(r => r.json()),
+      apiFetch('/api/config'),
+    ]);
+
+    const tokenContract = new ethers.Contract(cfg.contract_addr, abi, signer);
+
+    const decimals = await tokenContract.decimals();
+    const rawAmt   = ethers.parseUnits(amount.toString(), decimals);
+
+    const tx = await tokenContract.transfer(toAddr, rawAmt);
+    document.getElementById('tf-btn').innerHTML = '<span class="spinner"></span> Broadcasting…';
+    await tx.wait();
+
+    showAlert('transfer-alert', `✅ Transferred ${fmt(amount)} KRDS to ${shortAddr(toAddr)}`, 'success');
+    loadState();
+  } catch (e) {
+    const msg = e?.reason || e?.message || 'Transaction failed';
+    showAlert('transfer-alert', `🚫 ${msg}`);
+  } finally {
+    document.getElementById('tf-btn').disabled = false;
+    document.getElementById('tf-btn').textContent = 'Transfer';
+  }
+}
+
+// ─────────────────────────────────────────────
+//  ADMIN UNLOCK
+// ─────────────────────────────────────────────
+async function unlockAdmin() {
+  const pwd = document.getElementById('admin-pwd-input').value;
+  // Test password by making a harmless admin call — we'll just try minting 0
+  // Actually just verify by trying to call a safe read. We verify server-side on first real action.
+  // For UX, we store it and verify on first real action.
+  adminPassword = pwd;
+  document.getElementById('admin-lock').style.display    = 'none';
+  document.getElementById('admin-panel').style.display   = 'block';
+}
+
+function lockAdmin() {
+  adminPassword = null;
+  document.getElementById('admin-lock').style.display    = 'block';
+  document.getElementById('admin-panel').style.display   = 'none';
+  document.getElementById('admin-pwd-input').value       = '';
+}
+
+// ─────────────────────────────────────────────
+//  MINT
+// ─────────────────────────────────────────────
+async function doMint() {
+  const addr   = document.getElementById('mint-to').value.trim();
+  const amount = parseFloat(document.getElementById('mint-amt').value);
+  if (!addr || !amount) { showAlert('mint-alert', '🚫 Fill in all fields.'); return; }
+  try {
+    document.querySelector('[onclick="doMint()"]').disabled = true;
+    const res = await adminPost('/api/mint', { address: addr, amount });
+    showAlert('mint-alert', `✅ Minted ${fmt(amount)} KRDS to ${shortAddr(addr)}`, 'success');
+    loadState();
+  } catch (e) {
+    showAlert('mint-alert', `🚫 ${e.message}`);
+    if (e.message.includes('blacklisted') || e.message.includes('whitelisted')) {
+      logBlocked({ from: 'Owner', to: addr, amount, reason: e.message });
+    }
+  } finally {
+    document.querySelector('[onclick="doMint()"]').disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────
+//  BURN
+// ─────────────────────────────────────────────
+async function doBurn() {
+  const addr   = document.getElementById('burn-from').value.trim();
+  const amount = parseFloat(document.getElementById('burn-amt').value);
+  if (!addr || !amount) { showAlert('burn-alert', '🚫 Fill in all fields.'); return; }
+  try {
+    document.querySelector('[onclick="doBurn()"]').disabled = true;
+    const res = await adminPost('/api/burn', { address: addr, amount });
+    showAlert('burn-alert', `✅ Burned ${fmt(amount)} KRDS from ${shortAddr(addr)}`, 'success');
+    loadState();
+  } catch (e) {
+    showAlert('burn-alert', `🚫 ${e.message}`);
+    if (e.message.includes('blacklisted') || e.message.includes('whitelisted') || e.message.includes('balance')) {
+      logBlocked({ from: addr, to: '—', amount, reason: e.message });
+    }
+  } finally {
+    document.querySelector('[onclick="doBurn()"]').disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────
+//  WHITELIST
+// ─────────────────────────────────────────────
+async function doWhitelist(action) {
+  const addr = document.getElementById(action === 'add' ? 'wl-add' : 'wl-rm').value.trim();
+  if (!addr) { showAlert('wl-alert', '🚫 Enter an address.'); return; }
+  try {
+    await adminPost(`/api/whitelist/${action}`, { address: addr });
+    showAlert('wl-alert', `✅ ${shortAddr(addr)} ${action === 'add' ? 'whitelisted' : 'removed from whitelist'}.`, 'success');
+    loadState();
+  } catch (e) {
+    showAlert('wl-alert', `🚫 ${e.message}`);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  BLACKLIST
+// ─────────────────────────────────────────────
+async function doBlacklist(action) {
+  const addr = document.getElementById(action === 'add' ? 'bl-add' : 'bl-rm').value.trim();
+  if (!addr) { showAlert('bl-alert', '🚫 Enter an address.'); return; }
+  try {
+    await adminPost(`/api/blacklist/${action}`, { address: addr });
+    showAlert('bl-alert', `✅ ${shortAddr(addr)} ${action === 'add' ? 'blacklisted' : 'removed from blacklist'}.`, 'success');
+    loadState();
+  } catch (e) {
+    showAlert('bl-alert', `🚫 ${e.message}`);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  CHECK ADDRESS
+// ─────────────────────────────────────────────
+async function doCheck() {
+  const addr = document.getElementById('check-addr').value.trim();
+  if (!addr) { showAlert('check-alert', '🚫 Enter an address.'); return; }
+  try {
+    const info = await apiFetch(`/api/check/${addr}`);
+    document.getElementById('cr-balance').textContent = fmt(info.balance) + ' KRDS';
+    document.getElementById('cr-wl').textContent      = info.whitelisted ? '✅ Yes' : '❌ No';
+    document.getElementById('cr-bl').textContent      = info.blacklisted ? '🔴 Yes' : '— No';
+    document.getElementById('check-result').style.display = 'block';
+  } catch (e) {
+    showAlert('check-alert', `🚫 ${e.message}`);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────
+loadState();
+loadTransactions();
+</script>
+</body>
+</html>
