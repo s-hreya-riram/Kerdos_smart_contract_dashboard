@@ -282,3 +282,8 @@ def verify_password(req: PasswordOnlyRequest):
 @app.get("/api/abi")
 def get_abi():
     return JSONResponse(content=ABI)
+
+# This is to ensure clean logs for pings from uptime monitoring services
+@app.api_route("/", methods=["HEAD"])
+async def root():
+    return {"status": "ok"}
