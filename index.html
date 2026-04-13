@@ -346,7 +346,12 @@
 
         <div class="form-group">
           <label>Recipient Address</label>
-          <input type="text" id="tf-to" placeholder="0x…" />
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <button class="btn btn-primary" id="tf-mode-dropdown" onclick="setTransferMode('dropdown')" style="font-size:11px; padding:4px 10px;">Whitelist</button>
+            <button class="btn" id="tf-mode-manual" onclick="setTransferMode('manual')" style="font-size:11px; padding:4px 10px;">Manual Entry</button>
+          </div>
+          <select id="tf-to-select" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif;"></select>
+          <input type="text" id="tf-to" placeholder="0x..." style="display:none" />
         </div>
         <div class="form-group">
           <label>Amount (KRDS)</label>
@@ -419,11 +424,11 @@
             <button class="btn btn-primary" onclick="doWhitelist('add')" style="margin-bottom:12px">Add to Whitelist</button>
             <hr />
             <div class="form-group" style="margin-top:12px">
-              <label>Remove from Whitelist</label>
-              <input type="text" id="wl-rm" placeholder="0x…" />
+                <label>Remove from Whitelist</label>
+                <select id="wl-rm-select" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif;"></select>
+              </div>
+              <button class="btn" onclick="doWhitelist('remove')">Remove from Whitelist</button>
             </div>
-            <button class="btn" onclick="doWhitelist('remove')">Remove from Whitelist</button>
-          </div>
 
           <!-- BLACKLIST -->
           <div class="card">
@@ -437,10 +442,9 @@
             <hr />
             <div class="form-group" style="margin-top:12px">
               <label>Remove from Blacklist</label>
-              <input type="text" id="bl-rm" placeholder="0x…" />
+              <select id="bl-rm-select" style="width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif;"></select>
             </div>
             <button class="btn" onclick="doBlacklist('remove')">Remove from Blacklist</button>
-          </div>
         </div>
 
         <!-- CHECK ADDRESS -->
@@ -610,6 +614,29 @@ async function loadState() {
       document.getElementById('m-balance').textContent = '—';
     }
 
+    const tfSel = document.getElementById('tf-to-select');
+    const wlSel = document.getElementById('wl-rm-select');
+    const blSel = document.getElementById('bl-rm-select');
+    
+    tfSel.innerHTML = '<option value="">— Select Whitelisted —</option>';
+    wlSel.innerHTML = '<option value="">— Select to Remove —</option>';
+    blSel.innerHTML = '<option value="">— Select to Remove —</option>';
+
+    state.wallets.forEach(w => {
+      // 1. Transfer dropdown: Only whitelisted and not blacklisted
+      if (w.whitelisted && !w.blacklisted) {
+        tfSel.innerHTML += `<option value="${w.address}">${w.address}</option>`;
+      }
+      // 2. Whitelist removal dropdown
+      if (w.whitelisted) {
+        wlSel.innerHTML += `<option value="${w.address}">${shortAddr(w.address)}</option>`;
+      }
+      // 3. Blacklist removal dropdown
+      if (w.blacklisted) {
+        blSel.innerHTML += `<option value="${w.address}">${shortAddr(w.address)}</option>`;
+      }
+    });
+
     const tbody = document.getElementById('wallets-table');
     if (!state.wallets.length) {
       tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center">No wallets yet.</td></tr>';
@@ -687,7 +714,9 @@ async function doTransfer() {
     return;
   }
 
-  const toAddr = document.getElementById('tf-to').value.trim();
+  const toAddr = (transferMode === 'dropdown') 
+  ? document.getElementById('tf-to-select').value 
+  : document.getElementById('tf-to').value.trim();
   const amount = parseFloat(document.getElementById('tf-amt').value);
 
   if (!toAddr || !amount) {
@@ -848,7 +877,9 @@ async function doBurn() {
 //  WHITELIST
 // ─────────────────────────────────────────────
 async function doWhitelist(action) {
-  const addr = document.getElementById(action === 'add' ? 'wl-add' : 'wl-rm').value.trim();
+  const addr = (action === 'add') 
+  ? document.getElementById('wl-add').value.trim() 
+  : document.getElementById('wl-rm-select').value;
   if (!addr) { showAlert('wl-alert', '🚫 Enter an address.'); return; }
   try {
     await adminPost(`/api/whitelist/${action}`, { address: addr });
@@ -863,7 +894,9 @@ async function doWhitelist(action) {
 //  BLACKLIST
 // ─────────────────────────────────────────────
 async function doBlacklist(action) {
-  const addr = document.getElementById(action === 'add' ? 'bl-add' : 'bl-rm').value.trim();
+  const addr = (action === 'add') 
+  ? document.getElementById('bl-add').value.trim() 
+  : document.getElementById('bl-rm-select').value;
   if (!addr) { showAlert('bl-alert', '🚫 Enter an address.'); return; }
   try {
     await adminPost(`/api/blacklist/${action}`, { address: addr });
@@ -889,6 +922,16 @@ async function doCheck() {
   } catch (e) {
     showAlert('check-alert', `🚫 ${e.message}`);
   }
+}
+
+let transferMode = 'dropdown'; // Add this to your top-level state variables
+
+function setTransferMode(mode) {
+  transferMode = mode;
+  document.getElementById('tf-to-select').style.display = mode === 'dropdown' ? 'block' : 'none';
+  document.getElementById('tf-to').style.display = mode === 'manual' ? 'block' : 'none';
+  document.getElementById('tf-mode-dropdown').className = mode === 'dropdown' ? 'btn btn-primary' : 'btn';
+  document.getElementById('tf-mode-manual').className = mode === 'manual' ? 'btn btn-primary' : 'btn';
 }
 
 // ─────────────────────────────────────────────
