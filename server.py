@@ -32,6 +32,11 @@ contract = w3.eth.contract(
 DECIMALS = contract.functions.decimals().call()
 
 # ─────────────────────────────────────────────
+#  IN-MEMORY BLOCKED TRANSACTIONS STORE
+# ─────────────────────────────────────────────
+blocked_txns: list[dict] = []
+
+# ─────────────────────────────────────────────
 #  FASTAPI APP
 # ─────────────────────────────────────────────
 app = FastAPI()
@@ -163,6 +168,15 @@ class BurnRequest(BaseModel):
     address:  str
     amount:   float
 
+class BlockedTxnRequest(BaseModel):
+    from_addr: str
+    to_addr:   str
+    amount:    float
+    reason:    str
+
+class PasswordOnlyRequest(BaseModel):
+    password: str
+
 @app.post("/api/mint")
 def mint(req: MintRequest):
     check_admin_password(req.password)
@@ -245,3 +259,22 @@ def remove_blacklist(req: AdminRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/blocked")
+def log_blocked(req: BlockedTxnRequest):
+    blocked_txns.append({
+        "from":   req.from_addr,
+        "to":     req.to_addr,
+        "amount": req.amount,
+        "reason": req.reason,
+    })
+    return {"ok": True}
+
+@app.get("/api/blocked")
+def get_blocked():
+    return blocked_txns
+
+@app.post("/api/verify-password")
+def verify_password(req: PasswordOnlyRequest):
+    check_admin_password(req.password)
+    return {"ok": True}

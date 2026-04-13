@@ -317,7 +317,7 @@
       </div>
 
       <div class="card">
-        <h3>Blocked Transactions <span style="font-size:12px;color:var(--muted);font-weight:400">(this session)</span></h3>
+        <h3>Blocked Transactions</h3>
         <div class="table-wrap">
           <table>
             <thead><tr><th>From</th><th>To</th><th>Amount</th><th>Reason</th></tr></thead>
@@ -581,9 +581,24 @@ async function adminPost(path, extra = {}) {
   });
 }
 
-function logBlocked(entry) {
-  blockedTxns.push(entry);
-  renderBlocked();
+// ─────────────────────────────────────────────
+//  LOG BLOCKED (persists to backend)
+// ─────────────────────────────────────────────
+async function logBlocked(entry) {
+  try {
+    await apiFetch('/api/blocked', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        from_addr: entry.from,
+        to_addr:   entry.to,
+        amount:    entry.amount,
+        reason:    entry.reason,
+      }),
+    });
+  } catch (e) {
+    console.error('Failed to log blocked txn', e);
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -648,6 +663,15 @@ async function loadTransactions() {
         </tr>
       `).join('');
     }
+    // Fetch and render blocked transactions from backend
+    const blocked = await apiFetch('/api/blocked');
+    blockedTxns = blocked.map(b => ({
+      from:   b.from,
+      to:     b.to,
+      amount: b.amount,
+      reason: b.reason,
+    }));
+    renderBlocked();
   } catch (e) {
     console.error('loadTransactions failed', e);
   }
@@ -764,13 +788,21 @@ async function doTransfer() {
 //  ADMIN UNLOCK
 // ─────────────────────────────────────────────
 async function unlockAdmin() {
-  const pwd = document.getElementById('admin-pwd-input').value;
-  // Test password by making a harmless admin call — we'll just try minting 0
-  // Actually just verify by trying to call a safe read. We verify server-side on first real action.
-  // For UX, we store it and verify on first real action.
-  adminPassword = pwd;
-  document.getElementById('admin-lock').style.display    = 'none';
-  document.getElementById('admin-panel').style.display   = 'block';
+  const pwd = document.getElementById('admin-pwd-input').value.trim();
+  if (!pwd) { showAlert('admin-lock-alert', '🚫 Enter a password.'); return; }
+  try {
+    await apiFetch('/api/verify-password', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ password: pwd }),
+    });
+    adminPassword = pwd;
+    document.getElementById('admin-lock').style.display  = 'none';
+    document.getElementById('admin-panel').style.display = 'block';
+  } catch (e) {
+    showAlert('admin-lock-alert', '🚫 Invalid password.', 'error');
+    document.getElementById('admin-pwd-input').value = '';
+  }
 }
 
 function lockAdmin() {
