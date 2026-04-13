@@ -144,6 +144,7 @@
       transition: border-color 0.15s, box-shadow 0.15s;
     }
     input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    input:disabled { color: var(--muted); background: var(--bg); cursor: not-allowed; }
 
     .btn {
       padding: 9px 18px;
@@ -321,7 +322,7 @@
         <div class="table-wrap">
           <table>
             <thead><tr><th>From</th><th>To</th><th>Amount</th><th>Reason</th></tr></thead>
-            <tbody id="blocked-table"><tr><td colspan="4" style="color:var(--muted);text-align:center">No blocked transactions this session.</td></tr></tbody>
+            <tbody id="blocked-table"><tr><td colspan="4" style="color:var(--muted);text-align:center">No blocked transactions.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -362,7 +363,7 @@
       <!-- Admin lock screen -->
       <div id="admin-lock" class="card admin-lock">
         <h3>🔒 Admin Access Required</h3>
-        <p>Enter the admin password to access owner functions (mint, burn, whitelist, blacklist).</p>
+        <p>Connect your MetaMask wallet and enter the admin password to access mint, burn, whitelist, and blacklist functions.</p>
         <div class="form-group">
           <label>Admin Password</label>
           <input type="password" id="admin-pwd-input" placeholder="Enter password" onkeydown="if(event.key==='Enter')unlockAdmin()" />
@@ -380,8 +381,8 @@
             <h3>🟢 Mint Tokens</h3>
             <div id="mint-alert" class="alert"></div>
             <div class="form-group">
-              <label>Recipient Address</label>
-              <input type="text" id="mint-to" placeholder="0x…" />
+              <label>Recipient (Your Wallet)</label>
+              <input type="text" id="mint-to" disabled />
             </div>
             <div class="form-group">
               <label>Amount (KRDS)</label>
@@ -395,8 +396,8 @@
             <h3>🔴 Burn Tokens</h3>
             <div id="burn-alert" class="alert"></div>
             <div class="form-group">
-              <label>From Address</label>
-              <input type="text" id="burn-from" placeholder="0x…" />
+              <label>From (Your Wallet)</label>
+              <input type="text" id="burn-from" disabled />
             </div>
             <div class="form-group">
               <label>Amount (KRDS)</label>
@@ -471,19 +472,14 @@
 </div>
 
 <script>
-// ─────────────────────────────────────────────
-//  CONFIG — points to your FastAPI backend
-//  In production this is just window.location.origin
-//  since FastAPI serves both the HTML and API
-// ─────────────────────────────────────────────
 const API_BASE = window.location.origin;
 
 // ─────────────────────────────────────────────
 //  STATE
 // ─────────────────────────────────────────────
-let walletAddress  = null;
-let adminPassword  = null;
-let blockedTxns    = [];
+let walletAddress = null;
+let adminPassword = null;
+let blockedTxns   = [];
 
 // ─────────────────────────────────────────────
 //  TABS
@@ -495,8 +491,8 @@ function showTab(name) {
   });
   document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  if (name === 'overview')      loadState();
-  if (name === 'transactions')  loadTransactions();
+  if (name === 'overview')     loadState();
+  if (name === 'transactions') loadTransactions();
 }
 
 // ─────────────────────────────────────────────
@@ -524,10 +520,15 @@ function updateWalletUI() {
     btn.classList.add('connected');
     label.textContent = shortAddr(walletAddress);
     document.getElementById('no-wallet-notice').style.display = 'none';
+    // Keep mint/burn address fields in sync with connected wallet
+    document.getElementById('mint-to').value   = walletAddress;
+    document.getElementById('burn-from').value = walletAddress;
   } else {
     btn.classList.remove('connected');
     label.textContent = 'Connect Wallet';
     document.getElementById('no-wallet-notice').style.display = 'block';
+    document.getElementById('mint-to').value   = '';
+    document.getElementById('burn-from').value = '';
   }
 }
 
@@ -555,15 +556,6 @@ function showAlert(id, msg, type = 'error') {
   el.textContent = msg;
   el.className = `alert alert-${type} show`;
   setTimeout(() => el.classList.remove('show'), 6000);
-}
-
-function setLoading(btnId, loading) {
-  const btn = document.getElementById(btnId);
-  if (!btn) return;
-  btn.disabled = loading;
-  btn.innerHTML = loading
-    ? `<span class="spinner"></span> Processing…`
-    : btn.dataset.label || btn.textContent;
 }
 
 async function apiFetch(path, options = {}) {
@@ -611,7 +603,6 @@ async function loadState() {
     document.getElementById('m-token').textContent   = `${state.token_name} (${state.token_symbol})`;
     document.getElementById('m-wallets').textContent = state.wallets.length;
 
-    // Your balance
     if (walletAddress) {
       const mine = state.wallets.find(w => w.address.toLowerCase() === walletAddress.toLowerCase());
       document.getElementById('m-balance').textContent = mine ? fmt(mine.balance) + ' KRDS' : '0 KRDS';
@@ -619,7 +610,6 @@ async function loadState() {
       document.getElementById('m-balance').textContent = '—';
     }
 
-    // Wallets table
     const tbody = document.getElementById('wallets-table');
     if (!state.wallets.length) {
       tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center">No wallets yet.</td></tr>';
@@ -663,14 +653,9 @@ async function loadTransactions() {
         </tr>
       `).join('');
     }
-    // Fetch and render blocked transactions from backend
+
     const blocked = await apiFetch('/api/blocked');
-    blockedTxns = blocked.map(b => ({
-      from:   b.from,
-      to:     b.to,
-      amount: b.amount,
-      reason: b.reason,
-    }));
+    blockedTxns = blocked.map(b => ({ from: b.from, to: b.to, amount: b.amount, reason: b.reason }));
     renderBlocked();
   } catch (e) {
     console.error('loadTransactions failed', e);
@@ -680,7 +665,7 @@ async function loadTransactions() {
 function renderBlocked() {
   const tbody = document.getElementById('blocked-table');
   if (!blockedTxns.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center">No blocked transactions this session.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" style="color:var(--muted);text-align:center">No blocked transactions.</td></tr>';
   } else {
     tbody.innerHTML = blockedTxns.map(t => `
       <tr>
@@ -710,7 +695,6 @@ async function doTransfer() {
     return;
   }
 
-  // Pre-flight: check recipient via API
   let recipientInfo;
   try {
     recipientInfo = await apiFetch(`/api/check/${toAddr}`);
@@ -731,7 +715,6 @@ async function doTransfer() {
     return;
   }
 
-  // Check sender balance
   let senderInfo;
   try {
     senderInfo = await apiFetch(`/api/check/${walletAddress}`);
@@ -743,15 +726,12 @@ async function doTransfer() {
     showAlert('transfer-alert', `🚫 Insufficient balance. Available: ${fmt(senderInfo.balance)} KRDS`);
     return;
   }
-
-  // Check sender blacklisted
   if (senderInfo.blacklisted) {
     showAlert('transfer-alert', '🚫 Your wallet is blacklisted.');
     logBlocked({ from: walletAddress, to: toAddr, amount, reason: 'Sender is blacklisted' });
     return;
   }
 
-  // Sign and send via MetaMask
   try {
     document.getElementById('tf-btn').disabled = true;
     document.getElementById('tf-btn').innerHTML = '<span class="spinner"></span> Waiting for MetaMask…';
@@ -759,13 +739,9 @@ async function doTransfer() {
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer   = await provider.getSigner();
 
-    const [abi, cfg] = await Promise.all([
-      fetch('/abi.json').then(r => r.json()),
-      apiFetch('/api/config'),
-    ]);
+    fetch('/static/abi.json').then(r => r.json())
 
     const tokenContract = new ethers.Contract(cfg.contract_addr, abi, signer);
-
     const decimals = await tokenContract.decimals();
     const rawAmt   = ethers.parseUnits(amount.toString(), decimals);
 
@@ -790,6 +766,10 @@ async function doTransfer() {
 async function unlockAdmin() {
   const pwd = document.getElementById('admin-pwd-input').value.trim();
   if (!pwd) { showAlert('admin-lock-alert', '🚫 Enter a password.'); return; }
+  if (!walletAddress) {
+    showAlert('admin-lock-alert', '🚫 Connect your MetaMask wallet first.', 'info');
+    return;
+  }
   try {
     await apiFetch('/api/verify-password', {
       method:  'POST',
@@ -797,6 +777,9 @@ async function unlockAdmin() {
       body:    JSON.stringify({ password: pwd }),
     });
     adminPassword = pwd;
+    // Lock address fields to connected wallet
+    document.getElementById('mint-to').value   = walletAddress;
+    document.getElementById('burn-from').value = walletAddress;
     document.getElementById('admin-lock').style.display  = 'none';
     document.getElementById('admin-panel').style.display = 'block';
   } catch (e) {
@@ -807,21 +790,22 @@ async function unlockAdmin() {
 
 function lockAdmin() {
   adminPassword = null;
-  document.getElementById('admin-lock').style.display    = 'block';
-  document.getElementById('admin-panel').style.display   = 'none';
-  document.getElementById('admin-pwd-input').value       = '';
+  document.getElementById('admin-lock').style.display  = 'block';
+  document.getElementById('admin-panel').style.display = 'none';
+  document.getElementById('admin-pwd-input').value     = '';
 }
 
 // ─────────────────────────────────────────────
 //  MINT
 // ─────────────────────────────────────────────
 async function doMint() {
-  const addr   = document.getElementById('mint-to').value.trim();
+  if (!walletAddress) { showAlert('mint-alert', '🚫 Connect your wallet first.', 'info'); return; }
+  const addr   = walletAddress;
   const amount = parseFloat(document.getElementById('mint-amt').value);
-  if (!addr || !amount) { showAlert('mint-alert', '🚫 Fill in all fields.'); return; }
+  if (!amount) { showAlert('mint-alert', '🚫 Enter an amount.'); return; }
   try {
     document.querySelector('[onclick="doMint()"]').disabled = true;
-    const res = await adminPost('/api/mint', { address: addr, amount });
+    await adminPost('/api/mint', { address: addr, amount });
     showAlert('mint-alert', `✅ Minted ${fmt(amount)} KRDS to ${shortAddr(addr)}`, 'success');
     loadState();
   } catch (e) {
@@ -838,12 +822,13 @@ async function doMint() {
 //  BURN
 // ─────────────────────────────────────────────
 async function doBurn() {
-  const addr   = document.getElementById('burn-from').value.trim();
+  if (!walletAddress) { showAlert('burn-alert', '🚫 Connect your wallet first.', 'info'); return; }
+  const addr   = walletAddress;
   const amount = parseFloat(document.getElementById('burn-amt').value);
-  if (!addr || !amount) { showAlert('burn-alert', '🚫 Fill in all fields.'); return; }
+  if (!amount) { showAlert('burn-alert', '🚫 Enter an amount.'); return; }
   try {
     document.querySelector('[onclick="doBurn()"]').disabled = true;
-    const res = await adminPost('/api/burn', { address: addr, amount });
+    await adminPost('/api/burn', { address: addr, amount });
     showAlert('burn-alert', `✅ Burned ${fmt(amount)} KRDS from ${shortAddr(addr)}`, 'success');
     loadState();
   } catch (e) {
